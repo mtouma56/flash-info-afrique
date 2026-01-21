@@ -1,0 +1,29 @@
+# Robots.txt for Flash Info Afrique
+# https://flashinfoafrique.com
+
+User-agent: *
+Allow: /
+
+# Sitemaps
+Sitemap: https://flashinfoafrique.com/sitemap.xml
+
+# Disallow admin and API routes
+Disallow: /api/
+Disallow: /admin/
+Disallow: /__manus__/
+
+# Allow all crawlers to access the main content
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /

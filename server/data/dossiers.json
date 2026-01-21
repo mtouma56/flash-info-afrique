@@ -1,0 +1,64 @@
+[
+  {
+    "id": "dossier-fidelis",
+    "title": "Dossier FIDELIS Finance",
+    "slug": "fidelis",
+    "description": "Allégations de violation du secret bancaire dans l'UEMOA. Un cas inédit qui pourrait créer la première jurisprudence pénale en la matière dans la zone.",
+    "articleIds": [
+      "1768945206623"
+    ],
+    "timelineEvents": [
+      {
+        "id": "evt-1",
+        "date": "2024-10-15",
+        "title": "Signature du protocole tripartite",
+        "description": "Protocole d'accord entre ADAM TP, SOGETRA et SORIMPEX pour une cession d'actifs immobiliers de 7,7 milliards FCFA."
+      },
+      {
+        "id": "evt-2",
+        "date": "2024-11-24",
+        "title": "Demande de financement SORIMPEX",
+        "description": "SORIMPEX soumet à FIDELIS une demande de financement de 883,872 millions FCFA pour un projet de construction."
+      },
+      {
+        "id": "evt-3",
+        "date": "2025-02-12",
+        "title": "Réunion FIDELIS-SORIMPEX",
+        "description": "Réunion dans les locaux de FIDELIS à Abidjan. Divulgation présumée d'informations confidentielles sur SOGETRA."
+      },
+      {
+        "id": "evt-4",
+        "date": "2025-02-17",
+        "title": "Annulation de la transaction",
+        "description": "SORIMPEX annonce le désistement et l'annulation de la transaction de 7,7 milliards FCFA, cinq jours après la réunion."
+      },
+      {
+        "id": "evt-5",
+        "date": "2025-08-14",
+        "title": "Plainte auprès de la Commission Bancaire",
+        "description": "SOGETRA et ADAM TP déposent une plainte officielle auprès de la Commission Bancaire de l'UMOA."
+      },
+      {
+        "id": "evt-6",
+        "date": "2025-09-23",
+        "title": "Plainte pénale avec constitution de partie civile",
+        "description": "Dépôt d'une plainte pénale auprès du Doyen des Juges d'Instruction du TPI d'Abidjan-Plateau. Dommages-intérêts réclamés : 7,7 milliards FCFA."
+      },
+      {
+        "id": "evt-7",
+        "date": "2025-09-29",
+        "title": "Ouverture de l'instruction pénale",
+        "description": "Ouverture d'une information judiciaire par le Juge d'Instruction. FIDELIS Finance et quatre dirigeants mis en examen."
+      },
+      {
+        "id": "evt-8",
+        "date": "2025-10-17",
+        "title": "Inculpations officielles",
+        "description": "Les quatre dirigeants de FIDELIS Finance sont convoqués et officiellement inculpés. Contrôle judiciaire."
+      }
+    ],
+    "isActive": true,
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-21T11:32:58.619Z"
+  }
+]
