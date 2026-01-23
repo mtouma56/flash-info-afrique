@@ -35,6 +35,31 @@ export async function getArticles(): Promise<Article[]> {
   return ((result.data as Record<string, unknown>[]) || []).map(mapArticleFromDb);
 }
 
+// Optimized function for public endpoint - filters at DB level and uses limited fields
+export async function getPublishedArticles(): Promise<Article[]> {
+  const result = await withRetry(
+    async () =>
+      await supabaseAdmin
+        .from("articles")
+        .select("*")
+        .eq("status", "published")
+        .order("published_at", { ascending: false }),
+    {
+      maxRetries: 2,
+      onRetry: (attempt, error) => {
+        console.warn(`Retrying getPublishedArticles (attempt ${attempt}):`, error);
+      },
+    }
+  );
+
+  if (result.error) {
+    console.error("Error fetching published articles after retries:", result.error);
+    return [];
+  }
+
+  return ((result.data as Record<string, unknown>[]) || []).map(mapArticleFromDb);
+}
+
 export async function getArticle(id: string): Promise<Article | undefined> {
   const { data, error } = await supabaseAdmin
     .from("articles")
@@ -1061,6 +1086,7 @@ function mapRSSArticleFromDb(dbArticle: Record<string, unknown>): RSSArticle {
 export default {
   // Articles
   getArticles,
+  getPublishedArticles,
   getArticle,
   getArticleBySlug,
   createArticle,

@@ -1,10 +1,11 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import type { Article, Category } from "../../../shared/types/admin";
 import { fetchWithRetry, isOnline, type FetchError } from "@/lib/fetchWithTimeout";
 
 // Cache configuration
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache TTL
 const STALE_WHILE_REVALIDATE_MS = 30 * 1000; // 30 seconds for stale-while-revalidate
+const SAFETY_TIMEOUT_MS = 20 * 1000; // 20 seconds safety timeout to prevent infinite loading
 
 interface CacheEntry<T> {
   data: T;
@@ -47,6 +48,7 @@ export function ArticlesProvider({ children }: { children: ReactNode }) {
   const [errorType, setErrorType] = useState<FetchError["type"] | null>(null);
   const [isOffline, setIsOffline] = useState(!isOnline());
   const [lastUpdated, setLastUpdated] = useState<number | null>(articlesCache?.timestamp || null);
+  const safetyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Handle online/offline events
   useEffect(() => {
@@ -110,6 +112,22 @@ export function ArticlesProvider({ children }: { children: ReactNode }) {
     setError(null);
     setErrorType(null);
 
+    // Clear any existing safety timeout
+    if (safetyTimeoutRef.current) {
+      clearTimeout(safetyTimeoutRef.current);
+    }
+
+    // Set safety timeout to prevent infinite loading state
+    safetyTimeoutRef.current = setTimeout(() => {
+      console.warn("Safety timeout triggered - forcing loading state to false");
+      setIsLoading(false);
+      if (!articlesCache && !categoriesCache) {
+        setError("Le chargement a pris trop de temps. Veuillez réessayer.");
+        setErrorType("timeout");
+      }
+      fetchPromise = null;
+    }, SAFETY_TIMEOUT_MS);
+
     // Create fetch promise for deduplication
     fetchPromise = (async () => {
       try {
@@ -132,6 +150,12 @@ export function ArticlesProvider({ children }: { children: ReactNode }) {
             },
           }),
         ]);
+
+        // Clear safety timeout on successful completion
+        if (safetyTimeoutRef.current) {
+          clearTimeout(safetyTimeoutRef.current);
+          safetyTimeoutRef.current = null;
+        }
 
         // Check for errors
         if (articlesResult.error || categoriesResult.error) {
@@ -164,6 +188,11 @@ export function ArticlesProvider({ children }: { children: ReactNode }) {
         setLastUpdated(now);
         setIsLoading(false);
       } catch (err) {
+        // Clear safety timeout on error
+        if (safetyTimeoutRef.current) {
+          clearTimeout(safetyTimeoutRef.current);
+          safetyTimeoutRef.current = null;
+        }
         console.error("Unexpected error in fetchData:", err);
         setError("Une erreur inattendue est survenue");
         setErrorType("unknown");
@@ -174,6 +203,15 @@ export function ArticlesProvider({ children }: { children: ReactNode }) {
     })();
 
     await fetchPromise;
+  }, []);
+
+  // Cleanup safety timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (safetyTimeoutRef.current) {
+        clearTimeout(safetyTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Initial fetch
