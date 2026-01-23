@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import AdminLayout from "./AdminLayout";
 import { useAuthFetch } from "@/contexts/AuthContext";
-import { Edit, FileText, Save } from "lucide-react";
+import { Edit, FileText, Plus, Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { Category } from "@shared/types/admin";
@@ -40,19 +40,34 @@ const PRESET_COLORS = [
   "#84CC16", // Lime
 ];
 
+// Générer un slug à partir du nom
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Enlever les accents
+    .replace(/[^a-z0-9]+/g, "-") // Remplacer les caractères non alphanumériques par des tirets
+    .replace(/^-+|-+$/g, "") // Enlever les tirets au début et à la fin
+    .substring(0, 100); // Limiter la longueur
+}
+
 export default function AdminCategories() {
   const authFetch = useAuthFetch();
   const [categories, setCategories] = useState<Category[]>([]);
   const [articleCounts, setArticleCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [autoSlug, setAutoSlug] = useState(true);
+
+  const isCreating = editingCategory === null;
 
   const [formData, setFormData] = useState({
     name: "",
+    slug: "",
     description: "",
-    color: "",
+    color: "#1E3A8A",
   });
 
   useEffect(() => {
@@ -86,61 +101,118 @@ export default function AdminCategories() {
     }
   };
 
+  const handleCreate = () => {
+    setEditingCategory(null);
+    setFormData({
+      name: "",
+      slug: "",
+      description: "",
+      color: "#1E3A8A",
+    });
+    setAutoSlug(true);
+    setDialogOpen(true);
+  };
+
   const handleEdit = (category: Category) => {
     setEditingCategory(category);
     setFormData({
       name: category.name,
+      slug: category.slug,
       description: category.description,
       color: category.color,
     });
-    setEditDialogOpen(true);
+    setAutoSlug(false); // Don't auto-generate slug when editing
+    setDialogOpen(true);
+  };
+
+  const handleNameChange = (name: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      name,
+      slug: autoSlug ? generateSlug(name) : prev.slug,
+    }));
+  };
+
+  const handleSlugChange = (slug: string) => {
+    setAutoSlug(false);
+    setFormData((prev) => ({ ...prev, slug }));
   };
 
   const handleSave = async () => {
-    if (!editingCategory) return;
-
     if (!formData.name.trim()) {
       toast.error("Le nom est requis");
+      return;
+    }
+
+    const slug = formData.slug.trim() || generateSlug(formData.name);
+    if (!slug) {
+      toast.error("Le slug est requis");
       return;
     }
 
     setIsSaving(true);
 
     try {
-      const response = await authFetch(
-        `/api/admin/categories/${editingCategory.id}`,
-        {
-          method: "PUT",
+      if (isCreating) {
+        // Create new category
+        const response = await authFetch("/api/admin/categories", {
+          method: "POST",
           body: JSON.stringify({
-            ...editingCategory,
             name: formData.name,
+            slug,
             description: formData.description,
             color: formData.color,
           }),
-        }
-      );
+        });
 
-      if (response.ok) {
-        setCategories((prev) =>
-          prev.map((cat) =>
-            cat.id === editingCategory.id
-              ? {
-                  ...cat,
-                  name: formData.name,
-                  description: formData.description,
-                  color: formData.color,
-                }
-              : cat
-          )
-        );
-        toast.success("Catégorie mise à jour");
-        setEditDialogOpen(false);
+        if (response.ok) {
+          const newCategory = await response.json();
+          setCategories((prev) => [...prev, newCategory]);
+          toast.success("Catégorie créée");
+          setDialogOpen(false);
+        } else {
+          const error = await response.json();
+          toast.error(error.error || "Erreur lors de la création");
+        }
       } else {
-        const error = await response.json();
-        toast.error(error.message || "Erreur lors de la mise à jour");
+        // Update existing category
+        const response = await authFetch(
+          `/api/admin/categories/${editingCategory.id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify({
+              ...editingCategory,
+              name: formData.name,
+              slug: formData.slug,
+              description: formData.description,
+              color: formData.color,
+            }),
+          }
+        );
+
+        if (response.ok) {
+          setCategories((prev) =>
+            prev.map((cat) =>
+              cat.id === editingCategory.id
+                ? {
+                    ...cat,
+                    name: formData.name,
+                    slug: formData.slug,
+                    description: formData.description,
+                    color: formData.color,
+                  }
+                : cat
+            )
+          );
+          toast.success("Catégorie mise à jour");
+          setDialogOpen(false);
+        } else {
+          const error = await response.json();
+          toast.error(error.error || "Erreur lors de la mise à jour");
+        }
       }
     } catch (error) {
-      toast.error("Erreur lors de la mise à jour");
+      toast.error(isCreating ? "Erreur lors de la création" : "Erreur lors de la mise à jour");
     } finally {
       setIsSaving(false);
     }
@@ -152,16 +224,22 @@ export default function AdminCategories() {
       description="Gérez les catégories d'articles de votre site"
     >
       <div className="space-y-6">
-        {/* Info */}
-        <Card className="bg-muted/50">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
-              Les catégories permettent d'organiser vos articles par thème.
-              Vous pouvez modifier le nom, la description et la couleur de
-              chaque catégorie.
-            </p>
-          </CardContent>
-        </Card>
+        {/* Header avec bouton de création */}
+        <div className="flex items-center justify-between">
+          <Card className="bg-muted/50 flex-1 mr-4">
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground">
+                Les catégories permettent d'organiser vos articles par thème.
+                Vous pouvez créer, modifier le nom, la description et la couleur de
+                chaque catégorie.
+              </p>
+            </CardContent>
+          </Card>
+          <Button onClick={handleCreate}>
+            <Plus className="h-4 w-4 mr-2" />
+            Créer une catégorie
+          </Button>
+        </div>
 
         {/* Liste des catégories */}
         {isLoading ? (
@@ -219,13 +297,17 @@ export default function AdminCategories() {
         )}
       </div>
 
-      {/* Dialog d'édition */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+      {/* Dialog de création/édition */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Modifier la catégorie</DialogTitle>
+            <DialogTitle>
+              {isCreating ? "Créer une catégorie" : "Modifier la catégorie"}
+            </DialogTitle>
             <DialogDescription>
-              Modifiez les informations de la catégorie
+              {isCreating
+                ? "Remplissez les informations pour créer une nouvelle catégorie"
+                : "Modifiez les informations de la catégorie"}
             </DialogDescription>
           </DialogHeader>
 
@@ -235,11 +317,25 @@ export default function AdminCategories() {
               <Input
                 id="name"
                 value={formData.name}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, name: e.target.value }))
-                }
+                onChange={(e) => handleNameChange(e.target.value)}
                 placeholder="Nom de la catégorie"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="slug">Slug *</Label>
+              <Input
+                id="slug"
+                value={formData.slug}
+                onChange={(e) => handleSlugChange(e.target.value)}
+                placeholder="slug-de-la-categorie"
+                disabled={!isCreating}
+              />
+              <p className="text-xs text-muted-foreground">
+                {isCreating
+                  ? "Identifiant unique utilisé dans les URLs. Généré automatiquement depuis le nom."
+                  : "Le slug ne peut pas être modifié après la création."}
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -317,7 +413,7 @@ export default function AdminCategories() {
                     color: formData.color,
                   }}
                 >
-                  badge
+                  {formData.slug || "slug"}
                 </Badge>
               </div>
             </div>
@@ -326,14 +422,14 @@ export default function AdminCategories() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setEditDialogOpen(false)}
+              onClick={() => setDialogOpen(false)}
               disabled={isSaving}
             >
               Annuler
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
               <Save className="h-4 w-4 mr-2" />
-              {isSaving ? "Enregistrement..." : "Enregistrer"}
+              {isSaving ? "Enregistrement..." : isCreating ? "Créer" : "Enregistrer"}
             </Button>
           </DialogFooter>
         </DialogContent>

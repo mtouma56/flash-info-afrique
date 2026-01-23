@@ -41,7 +41,7 @@ export default function RSSFeedEdit() {
     url: "",
     enabled: true,
     autoPublish: false,
-    defaultCategory: "",
+    defaultCategory: "__none__",
     keywords: [] as string[],
     excludeKeywords: [] as string[],
     minLength: 0,
@@ -79,7 +79,7 @@ export default function RSSFeedEdit() {
           url: feed.url,
           enabled: feed.enabled,
           autoPublish: feed.autoPublish,
-          defaultCategory: feed.defaultCategory || "",
+          defaultCategory: feed.defaultCategory || "__none__",
           keywords: feed.filters.keywords || [],
           excludeKeywords: feed.filters.excludeKeywords || [],
           minLength: feed.filters.minLength || 0,
@@ -188,21 +188,30 @@ export default function RSSFeedEdit() {
     setIsSaving(true);
 
     try {
-      const feedData = {
+      // Build clean filters object without undefined values
+      const filters: Record<string, unknown> = {};
+      if (formData.keywords.length > 0) {
+        filters.keywords = formData.keywords;
+      }
+      if (formData.excludeKeywords.length > 0) {
+        filters.excludeKeywords = formData.excludeKeywords;
+      }
+      if (formData.minLength > 0) {
+        filters.minLength = formData.minLength;
+      }
+
+      const feedData: Record<string, unknown> = {
         name: formData.name,
         url: formData.url,
         enabled: formData.enabled,
         autoPublish: formData.autoPublish,
-        defaultCategory: formData.defaultCategory || undefined,
-        filters: {
-          keywords: formData.keywords.length > 0 ? formData.keywords : undefined,
-          excludeKeywords:
-            formData.excludeKeywords.length > 0
-              ? formData.excludeKeywords
-              : undefined,
-          minLength: formData.minLength > 0 ? formData.minLength : undefined,
-        },
+        filters,
       };
+
+      // Only include defaultCategory if it has a valid value (not "__none__")
+      if (formData.defaultCategory && formData.defaultCategory !== "__none__") {
+        feedData.defaultCategory = formData.defaultCategory;
+      }
 
       const url = isNew
         ? "/api/admin/rss/feeds"
@@ -218,10 +227,16 @@ export default function RSSFeedEdit() {
         toast.success(isNew ? "Flux créé" : "Flux mis à jour");
         setLocation("/admin/rss");
       } else {
-        const error = await response.json();
-        toast.error(error.message || "Erreur lors de l'enregistrement");
+        const errorData = await response.json();
+        const errorMessage = errorData.error || errorData.message || "Erreur lors de l'enregistrement";
+        // Log details for debugging
+        if (errorData.details) {
+          console.error("RSS Feed Error Details:", errorData.details);
+        }
+        toast.error(errorMessage);
       }
     } catch (error) {
+      console.error("RSS Feed Save Error:", error);
       toast.error("Erreur lors de l'enregistrement");
     } finally {
       setIsSaving(false);
@@ -504,9 +519,9 @@ export default function RSSFeedEdit() {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label htmlFor="autoPublish">Publication automatique</Label>
+                    <Label htmlFor="autoPublish">Pré-approuver les articles</Label>
                     <p className="text-xs text-muted-foreground">
-                      Publier sans modération
+                      Marquer comme approuvés automatiquement
                     </p>
                   </div>
                   <Switch
@@ -518,14 +533,13 @@ export default function RSSFeedEdit() {
                   />
                 </div>
 
-                {!formData.autoPublish && (
-                  <div className="p-3 bg-muted rounded-lg text-sm">
-                    <p className="text-muted-foreground">
-                      Les articles importés seront placés en attente de
-                      modération avant publication.
-                    </p>
-                  </div>
-                )}
+                <div className="p-3 bg-muted rounded-lg text-sm">
+                  <p className="text-muted-foreground">
+                    {formData.autoPublish
+                      ? "Les articles seront pré-approuvés mais nécessitent toujours une validation finale par un régulateur avant publication."
+                      : "Les articles importés seront placés en attente de modération avant publication."}
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
@@ -545,7 +559,7 @@ export default function RSSFeedEdit() {
                     <SelectValue placeholder="Sélectionner..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Aucune</SelectItem>
+                    <SelectItem value="__none__">Aucune</SelectItem>
                     {categories.map((cat) => (
                       <SelectItem key={cat.id} value={cat.id}>
                         <div className="flex items-center gap-2">

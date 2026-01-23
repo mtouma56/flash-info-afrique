@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import OptimizedImage from "@/components/OptimizedImage";
 import { useArticles, type Article } from "@/hooks/useArticles";
 import { ArrowRight, Calendar, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
@@ -31,17 +32,21 @@ export default function ArticleCard({
         <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 border-2 hover:border-primary/20">
           <div className="grid md:grid-cols-2 gap-0">
             {/* Image */}
-            <div className="relative h-64 md:h-full overflow-hidden">
-              <img
+            <div className="relative h-48 md:h-72 overflow-hidden">
+              <OptimizedImage
                 src={article.imageUrl}
                 alt={`Image illustrant: ${article.title}`}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                loading="eager"
+                className="w-full h-full group-hover:scale-105 transition-transform duration-500"
+                aspectRatio="16/9"
+                width={800}
+                height={450}
+                priority={true}
+                sizes="(max-width: 768px) 100vw, 50vw"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
               {article.isFeatured && (
                 <Badge
-                  className="absolute top-4 left-4 bg-secondary text-secondary-foreground"
+                  className="absolute top-4 left-4 bg-secondary text-secondary-foreground z-10"
                   style={{ backgroundColor: "#F97316" }}
                 >
                   À la une
@@ -50,7 +55,7 @@ export default function ArticleCard({
             </div>
 
             {/* Content */}
-            <CardContent className="p-6 md:p-8 flex flex-col justify-between">
+            <CardContent className="p-4 md:p-6 flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-4">
                   <Badge
@@ -69,23 +74,23 @@ export default function ArticleCard({
                   </div>
                 </div>
 
-                <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-4 group-hover:text-primary transition-colors line-clamp-3">
+                <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground mb-3 group-hover:text-primary transition-colors line-clamp-3">
                   {article.title}
                 </h2>
 
-                <p className="text-muted-foreground mb-4 line-clamp-3">
+                <p className="text-muted-foreground mb-3 line-clamp-2">
                   {article.excerpt}
                 </p>
 
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
                   <ExternalLink className="h-4 w-4" aria-hidden="true" />
                   <span>Source : {article.source.name}</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
                 <Link href={`/article/${article.slug}`}>
-                  <Button className="group/btn">
+                  <Button className="group/btn min-h-[44px]">
                     Lire la suite
                     <ArrowRight className="ml-2 h-4 w-4 group-hover/btn:translate-x-1 transition-transform" aria-hidden="true" />
                   </Button>
@@ -94,7 +99,7 @@ export default function ArticleCard({
                   href={article.source.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline"
+                  className="text-sm text-primary hover:underline py-2"
                 >
                   Article original →
                 </a>
@@ -111,13 +116,17 @@ export default function ArticleCard({
       <Card className="overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1 h-full flex flex-col">
         {/* Image */}
         <div className="relative h-48 overflow-hidden">
-          <img
+          <OptimizedImage
             src={article.imageUrl}
             alt={`Image illustrant: ${article.title}`}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            loading="lazy"
+            className="w-full h-full group-hover:scale-105 transition-transform duration-500"
+            aspectRatio="16/9"
+            width={400}
+            height={225}
+            priority={false}
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
         </div>
 
         {/* Content */}

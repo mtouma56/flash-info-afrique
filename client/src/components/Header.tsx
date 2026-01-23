@@ -22,6 +22,7 @@ export default function Header() {
 
   const navigation = [
     { name: "Accueil", href: "/" },
+    { name: "Tous les articles", href: "/articles" },
     { name: "Dossier FIDELIS", href: "/dossier/fidelis" },
     { name: "Banque & Finance", href: "/categorie/banque-finance" },
     { name: "Régulation", href: "/categorie/regulation-conformite" },
@@ -76,20 +77,14 @@ export default function Header() {
             {/* Logo */}
             <Link
               href="/"
-              className="flex items-center space-x-2 hover:opacity-80 transition-opacity"
+              className="flex items-center hover:opacity-80 transition-opacity"
               aria-label="Flash Info Afrique - Accueil"
             >
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary">
-                <span className="text-white font-bold text-xl" aria-hidden="true">F</span>
-              </div>
-              <div className="hidden sm:block">
-                <span className="text-xl font-bold text-foreground font-['Sora'] block">
-                  Flash Info Afrique
-                </span>
-                <span className="text-xs text-muted-foreground block">
-                  L'actualité économique UEMOA
-                </span>
-              </div>
+              <img 
+                src="/logo.png" 
+                alt="Flash Info Afrique" 
+                className="h-14 w-auto object-contain"
+              />
             </Link>
 
             {/* Desktop Navigation */}
@@ -114,12 +109,12 @@ export default function Header() {
             </nav>
 
             {/* Right Actions */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1 sm:space-x-2">
               <ThemeToggle />
               <Button
                 variant="ghost"
                 size="icon"
-                className="hidden sm:flex"
+                className="hidden sm:flex h-11 w-11 min-h-[44px] min-w-[44px]"
                 onClick={() => setSearchOpen(true)}
                 aria-label="Rechercher (Ctrl+K)"
               >
@@ -128,7 +123,7 @@ export default function Header() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="md:hidden"
+                className="md:hidden h-11 w-11 min-h-[44px] min-w-[44px]"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 aria-expanded={mobileMenuOpen}
                 aria-controls="mobile-menu"
@@ -146,16 +141,16 @@ export default function Header() {
           {/* Mobile Navigation */}
           {mobileMenuOpen && (
             <nav id="mobile-menu" className="md:hidden border-t border-border py-4" aria-label="Navigation mobile">
-              <div className="flex flex-col space-y-2">
+              <div className="flex flex-col space-y-1">
                 <Button
                   variant="ghost"
-                  className="justify-start"
+                  className="justify-start h-12 min-h-[44px]"
                   onClick={() => {
                     setMobileMenuOpen(false);
                     setSearchOpen(true);
                   }}
                 >
-                  <Search className="h-4 w-4 mr-2" aria-hidden="true" />
+                  <Search className="h-5 w-5 mr-3" aria-hidden="true" />
                   Rechercher
                 </Button>
                 {navigation.map((item) => {
@@ -164,7 +159,7 @@ export default function Header() {
                     <Link
                       key={item.name}
                       href={item.href}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors block ${
+                      className={`px-4 py-3 min-h-[44px] rounded-md text-base font-medium transition-colors block flex items-center ${
                         isActive
                           ? "bg-primary text-primary-foreground"
                           : "text-foreground hover:bg-muted"

@@ -1,0 +1,61 @@
+{
+  "name": "Flash Info Afrique",
+  "short_name": "Flash Info",
+  "description": "L'actualité économique et financière de la zone UEMOA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1E3A8A",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "fr",
+  "dir": "ltr",
+  "categories": ["news", "business", "finance"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/og-image.svg",
+      "sizes": "1200x630",
+      "type": "image/svg+xml",
+      "form_factor": "wide",
+      "label": "Page d'accueil de Flash Info Afrique"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dernières actualités",
+      "short_name": "Actualités",
+      "description": "Voir les derniers articles",
+      "url": "/",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Dossier FIDELIS",
+      "short_name": "FIDELIS",
+      "description": "Suivre le dossier FIDELIS Finance",
+      "url": "/dossier/fidelis",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
+}

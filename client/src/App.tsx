@@ -7,10 +7,12 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
+import { ArticlesProvider } from "./contexts/ArticlesContext";
 import ProtectedRoute from "./pages/admin/ProtectedRoute";
 
 // Lazy load public pages for code splitting
 const Home = lazy(() => import("./pages/Home"));
+const Articles = lazy(() => import("./pages/Articles"));
 const Dossier = lazy(() => import("./pages/Dossier"));
 const Article = lazy(() => import("./pages/Article"));
 const Category = lazy(() => import("./pages/Category"));
@@ -27,6 +29,7 @@ const AdminRSS = lazy(() => import("./pages/admin/RSS"));
 const AdminRSSFeedEdit = lazy(() => import("./pages/admin/RSSFeedEdit"));
 const AdminRSSPending = lazy(() => import("./pages/admin/RSSPending"));
 const AdminSettings = lazy(() => import("./pages/admin/Settings"));
+const AdminUsers = lazy(() => import("./pages/admin/Users"));
 
 // Loading fallback component
 function PageLoader() {
@@ -46,6 +49,7 @@ function Router() {
       <Switch>
         {/* Public routes */}
         <Route path="/" component={Home} />
+        <Route path="/articles" component={Articles} />
         <Route path="/dossier/:slug" component={Dossier} />
         <Route path="/article/:slug" component={Article} />
         <Route path="/categorie/:slug" component={Category} />
@@ -132,6 +136,12 @@ function Router() {
           </ProtectedRoute>
         </Route>
 
+        <Route path="/admin/users">
+          <ProtectedRoute>
+            <AdminUsers />
+          </ProtectedRoute>
+        </Route>
+
         {/* 404 and fallback */}
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
@@ -146,10 +156,12 @@ function App() {
       <HelmetProvider>
         <ThemeProvider defaultTheme="system" switchable>
           <AuthProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Router />
-            </TooltipProvider>
+            <ArticlesProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Router />
+              </TooltipProvider>
+            </ArticlesProvider>
           </AuthProvider>
         </ThemeProvider>
       </HelmetProvider>

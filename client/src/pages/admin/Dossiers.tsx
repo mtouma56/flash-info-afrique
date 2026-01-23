@@ -24,6 +24,7 @@ import { useAuthFetch } from "@/contexts/AuthContext";
 import {
   Edit,
   Eye,
+  EyeOff,
   FileText,
   MoreHorizontal,
   Plus,
@@ -76,7 +77,7 @@ export default function AdminDossiers() {
           )
         );
         toast.success(
-          dossier.isActive ? "Dossier désactivé" : "Dossier activé"
+          dossier.isActive ? "Dossier masqué du site" : "Dossier affiché sur le site"
         );
       }
     } catch (error) {
@@ -163,7 +164,10 @@ export default function AdminDossiers() {
                           {dossier.title}
                         </CardTitle>
                         {!dossier.isActive && (
-                          <Badge variant="secondary">Inactif</Badge>
+                          <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800 dark:text-orange-400">
+                            <EyeOff className="h-3 w-3 mr-1" />
+                            Masqué
+                          </Badge>
                         )}
                       </div>
                       <CardDescription className="line-clamp-2">
@@ -192,7 +196,17 @@ export default function AdminDossiers() {
                         <DropdownMenuItem
                           onClick={() => handleToggleActive(dossier)}
                         >
-                          {dossier.isActive ? "Désactiver" : "Activer"}
+                          {dossier.isActive ? (
+                            <>
+                              <EyeOff className="h-4 w-4 mr-2" />
+                              Masquer du site
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="h-4 w-4 mr-2" />
+                              Afficher sur le site
+                            </>
+                          )}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -222,9 +236,34 @@ export default function AdminDossiers() {
                       {dossier.timelineEvents.length > 1 ? "s" : ""}
                     </div>
                   </div>
-                  <div className="mt-3 text-xs text-muted-foreground">
-                    Mis à jour le{" "}
-                    {new Date(dossier.updatedAt).toLocaleDateString("fr-FR")}
+                  <div className="flex items-center justify-between mt-3">
+                    <div className="text-xs text-muted-foreground">
+                      Mis à jour le{" "}
+                      {new Date(dossier.updatedAt).toLocaleDateString("fr-FR")}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-7 px-2 text-xs ${
+                        dossier.isActive 
+                          ? "text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-950/30" 
+                          : "text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950/30"
+                      }`}
+                      onClick={() => handleToggleActive(dossier)}
+                      title={dossier.isActive ? "Masquer du site" : "Afficher sur le site"}
+                    >
+                      {dossier.isActive ? (
+                        <>
+                          <Eye className="h-3.5 w-3.5 mr-1" />
+                          Visible
+                        </>
+                      ) : (
+                        <>
+                          <EyeOff className="h-3.5 w-3.5 mr-1" />
+                          Masqué
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

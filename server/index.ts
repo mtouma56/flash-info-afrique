@@ -1,3 +1,6 @@
+// Load environment variables FIRST (before any other imports)
+import "dotenv/config";
+
 import compression from "compression";
 import express from "express";
 import rateLimit from "express-rate-limit";
@@ -8,13 +11,14 @@ import { fileURLToPath } from "url";
 
 // Auth and storage imports
 import {
-  generateToken,
-  verifyPassword,
-  hashPassword,
   requireAuth,
+  authenticateByUsername,
 } from "./middleware/auth";
-import storage from "./data/storage";
+import storage from "./data/supabaseStorage";
 import rssService from "./services/rssService";
+import { supabaseAdmin } from "./lib/supabase";
+import logger from "./lib/logger";
+import requestLogger from "./middleware/requestLogger";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,27 +29,61 @@ function isValidEmail(email: string): boolean {
   return emailRegex.test(email);
 }
 
-// In-memory newsletter subscribers (in production, use a database)
-const newsletterSubscribers = new Set<string>();
-
 async function startServer() {
   const app = express();
   const server = createServer(app);
 
   // Security headers with Helmet
+  // Note: 'unsafe-inline' is required for React/Vite style injection and some libraries
+  // In a future iteration, consider using nonces or hashes for scripts
   app.use(
     helmet({
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
+          scriptSrc: [
+            "'self'",
+            "'unsafe-inline'", // Required for React/Vite in production
+            "https://fonts.googleapis.com",
+            "https://fonts.gstatic.com",
+            // Allow Sentry if configured
+            "https://*.sentry.io",
+            "https://*.ingest.sentry.io",
+            // Allow analytics if configured (Umami)
+            process.env.VITE_ANALYTICS_ENDPOINT || "",
+          ].filter(Boolean),
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-          fontSrc: ["'self'", "https://fonts.gstatic.com"],
+          fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
           imgSrc: ["'self'", "data:", "https:", "blob:"],
-          connectSrc: ["'self'", "https:"],
+          connectSrc: [
+            "'self'",
+            "https:",
+            "https://*.supabase.co",
+            "wss://*.supabase.co",
+            // Sentry
+            "https://*.sentry.io",
+            "https://*.ingest.sentry.io",
+            // Analytics
+            process.env.VITE_ANALYTICS_ENDPOINT || "",
+          ].filter(Boolean),
+          frameSrc: ["'none'"],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"],
+          frameAncestors: ["'none'"],
+          upgradeInsecureRequests: process.env.NODE_ENV === "production" ? [] : null,
         },
       },
       crossOriginEmbedderPolicy: false,
+      // Additional security headers
+      referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+      hsts: {
+        maxAge: 31536000, // 1 year
+        includeSubDomains: true,
+        preload: true,
+      },
+      noSniff: true,
+      xssFilter: true,
     })
   );
 
@@ -73,13 +111,61 @@ async function startServer() {
   // Apply general rate limiter to API routes
   app.use("/api/", generalLimiter);
 
+  // Request logging
+  app.use(requestLogger);
+
   // Parse JSON bodies
   app.use(express.json({ limit: "50kb" }));
 
   // ============ PUBLIC ENDPOINTS ============
 
+  // Health check endpoint
+  app.get("/api/health", async (_req, res) => {
+    try {
+      const health = {
+        status: "ok",
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        environment: process.env.NODE_ENV || "development",
+        services: {
+          database: "unknown" as "ok" | "error" | "unknown",
+        },
+      };
+
+      // Check Supabase connection
+      try {
+        const { error } = await supabaseAdmin.from("categories").select("count").limit(1);
+        if (error) {
+          health.services.database = "error";
+          return res.status(503).json({
+            ...health,
+            error: "Database connection failed",
+            details: error.message,
+          });
+        }
+        health.services.database = "ok";
+      } catch (error) {
+        health.services.database = "error";
+        return res.status(503).json({
+          ...health,
+          error: "Database connection failed",
+          details: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      return res.json(health);
+    } catch (error) {
+      return res.status(500).json({
+        status: "error",
+        timestamp: new Date().toISOString(),
+        error: "Health check failed",
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   // Newsletter subscription endpoint
-  app.post("/api/newsletter/subscribe", newsletterLimiter, (req, res) => {
+  app.post("/api/newsletter/subscribe", newsletterLimiter, async (req, res) => {
     try {
       const { email } = req.body;
 
@@ -93,19 +179,22 @@ async function startServer() {
         return res.status(400).json({ error: "L'adresse email n'est pas valide." });
       }
 
-      if (newsletterSubscribers.has(trimmedEmail)) {
+      // Check if already subscribed
+      const isSubscribed = await storage.isNewsletterSubscribed(trimmedEmail);
+      if (isSubscribed) {
         return res.status(409).json({ error: "Cette adresse email est déjà inscrite." });
       }
 
-      newsletterSubscribers.add(trimmedEmail);
-      console.log(`Newsletter subscription: ${trimmedEmail}`);
+      // Subscribe using Supabase storage
+      await storage.subscribeNewsletter(trimmedEmail);
+      logger.info("Newsletter subscription", { email: trimmedEmail });
 
       return res.status(201).json({
         success: true,
         message: "Inscription réussie ! Vous recevrez notre newsletter chaque vendredi.",
       });
     } catch (error) {
-      console.error("Newsletter subscription error:", error);
+      logger.error("Newsletter subscription error", undefined, error);
       return res.status(500).json({ error: "Une erreur est survenue. Veuillez réessayer." });
     }
   });
@@ -119,7 +208,7 @@ async function startServer() {
       publishedArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
       return res.json(publishedArticles);
     } catch (error) {
-      console.error("Public articles list error:", error);
+      logger.error("Public articles list error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération des articles" });
     }
   });
@@ -127,14 +216,24 @@ async function startServer() {
   // Public article by slug endpoint
   app.get("/api/articles/:slug", async (req, res) => {
     try {
-      const allArticles = await storage.getArticles();
-      const article = allArticles.find((a) => a.slug === req.params.slug && a.status === "published");
-      if (!article) {
+      const slug = req.params.slug;
+      
+      // Validate slug parameter
+      if (!slug || typeof slug !== "string" || slug.trim() === "") {
+        return res.status(400).json({ error: "Slug invalide" });
+      }
+      
+      // Use getArticleBySlug for better performance
+      const article = await storage.getArticleBySlug(slug);
+      
+      // Only return published articles
+      if (!article || article.status !== "published") {
         return res.status(404).json({ error: "Article non trouvé" });
       }
+      
       return res.json(article);
     } catch (error) {
-      console.error("Public article get error:", error);
+      logger.error("Public article get error", { slug: req.params.slug }, error);
       return res.status(500).json({ error: "Erreur lors de la récupération de l'article" });
     }
   });
@@ -145,7 +244,7 @@ async function startServer() {
       const categories = await storage.getCategories();
       return res.json(categories);
     } catch (error) {
-      console.error("Public categories list error:", error);
+      logger.error("Public categories list error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération des catégories" });
     }
   });
@@ -157,7 +256,7 @@ async function startServer() {
       const activeDossiers = allDossiers.filter((d) => d.isActive);
       return res.json(activeDossiers);
     } catch (error) {
-      console.error("Public dossiers list error:", error);
+      logger.error("Public dossiers list error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération des dossiers" });
     }
   });
@@ -165,14 +264,24 @@ async function startServer() {
   // Public dossier by slug endpoint
   app.get("/api/dossiers/:slug", async (req, res) => {
     try {
-      const allDossiers = await storage.getDossiers();
-      const dossier = allDossiers.find((d) => d.slug === req.params.slug && d.isActive);
-      if (!dossier) {
+      const slug = req.params.slug;
+      
+      // Validate slug parameter
+      if (!slug || typeof slug !== "string" || slug.trim() === "") {
+        return res.status(400).json({ error: "Slug invalide" });
+      }
+      
+      // Use getDossierBySlug for better performance
+      const dossier = await storage.getDossierBySlug(slug);
+      
+      // Only return active dossiers
+      if (!dossier || !dossier.isActive) {
         return res.status(404).json({ error: "Dossier non trouvé" });
       }
+      
       return res.json(dossier);
     } catch (error) {
-      console.error("Public dossier get error:", error);
+      logger.error("Public dossier get error", { slug: req.params.slug }, error);
       return res.status(500).json({ error: "Erreur lors de la récupération du dossier" });
     }
   });
@@ -188,48 +297,179 @@ async function startServer() {
         return res.status(400).json({ error: "Identifiants requis" });
       }
 
-      // Get user from storage
-      let user = await storage.getAdminUser(username);
-
       // If no users exist, create default admin user
-      if (!user) {
-        const users = await storage.getAdminUsers();
-        if (users.length === 0 && username === "admin" && password === "admin123") {
-          // Create default admin user
-          const passwordHash = await hashPassword("admin123");
-          const newUser = await storage.createAdminUser({ username: "admin", passwordHash });
-          user = { ...newUser, passwordHash };
+      const users = await storage.getAdminUsers();
+      logger.info(`Found ${users.length} admin users in database`);
+      
+      if (users.length === 0 && username === "admin" && password === "admin123") {
+        try {
+          logger.info("Creating default admin user...");
+          await storage.createAdminUser({
+            username: "admin",
+            password: "admin123",
+            email: "admin@flash-info-afrique.local",
+          });
+          logger.info("Default admin user created successfully");
+        } catch (err) {
+          logger.error("Error creating default admin", undefined, err);
+          // Continue to try authentication - the user might already exist in Supabase Auth
         }
       }
 
-      if (!user) {
+      // Authenticate with Supabase via username
+      const authResult = await authenticateByUsername(username, password);
+
+      if (!authResult) {
         return res.status(401).json({ error: "Identifiants incorrects" });
       }
 
-      // Verify password
-      const isValid = await verifyPassword(password, user.passwordHash);
-      if (!isValid) {
-        return res.status(401).json({ error: "Identifiants incorrects" });
-      }
-
-      // Generate token
-      const token = generateToken({
-        id: user.id,
-        username: user.username,
-        role: user.role,
-      });
-
+      // Return session for client to use
       return res.json({
-        token,
+        token: authResult.token,
+        session: {
+          access_token: authResult.token,
+          refresh_token: authResult.refreshToken,
+        },
         user: {
-          id: user.id,
-          username: user.username,
-          role: user.role,
+          id: authResult.user.userId,
+          username: authResult.user.username,
+          role: authResult.user.role,
+          email: authResult.user.email,
         },
       });
     } catch (error) {
-      console.error("Login error:", error);
+      logger.error("Login error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la connexion" });
+    }
+  });
+
+  // Get current admin user endpoint (for client auth verification)
+  app.get("/api/admin/me", requireAuth, async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Non authentifié" });
+      }
+
+      return res.json({
+        id: req.user.userId,
+        username: req.user.username,
+        role: req.user.role,
+        email: req.user.email,
+      });
+    } catch (error) {
+      logger.error("Get current user error", undefined, error);
+      return res.status(500).json({ error: "Erreur lors de la récupération de l'utilisateur" });
+    }
+  });
+
+  // ============ ADMIN USERS MANAGEMENT ============
+
+  // List all admin users
+  app.get("/api/admin/users", requireAuth, async (req, res) => {
+    try {
+      // Only admins can list users
+      if (req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Accès non autorisé" });
+      }
+
+      const users = await storage.getAdminUsers();
+      return res.json({ items: users, total: users.length });
+    } catch (error) {
+      logger.error("List users error", undefined, error);
+      return res.status(500).json({ error: "Erreur lors de la récupération des utilisateurs" });
+    }
+  });
+
+  // Create a new admin user
+  app.post("/api/admin/users", requireAuth, async (req, res) => {
+    try {
+      // Only admins can create users
+      if (req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Accès non autorisé" });
+      }
+
+      const { username, email, password, role } = req.body;
+
+      if (!username || !password) {
+        return res.status(400).json({ error: "Username et password requis" });
+      }
+
+      if (role && !["admin", "editor"].includes(role)) {
+        return res.status(400).json({ error: "Rôle invalide. Utilisez 'admin' ou 'editor'" });
+      }
+
+      const newUser = await storage.createAdminUser({
+        username,
+        email,
+        password,
+        role: role || "editor",
+      });
+
+      logger.info(`Admin user created: ${username} with role ${role || "editor"}`);
+      return res.status(201).json(newUser);
+    } catch (error) {
+      logger.error("Create user error", undefined, error);
+      const message = error instanceof Error ? error.message : "Erreur lors de la création de l'utilisateur";
+      return res.status(500).json({ error: message });
+    }
+  });
+
+  // Update an admin user
+  app.patch("/api/admin/users/:id", requireAuth, async (req, res) => {
+    try {
+      // Only admins can update users
+      if (req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Accès non autorisé" });
+      }
+
+      const { id } = req.params;
+      const { username, role } = req.body;
+
+      // Prevent self-demotion from admin
+      if (id === req.user.userId && role && role !== "admin") {
+        return res.status(400).json({ error: "Vous ne pouvez pas modifier votre propre rôle" });
+      }
+
+      if (role && !["admin", "editor"].includes(role)) {
+        return res.status(400).json({ error: "Rôle invalide. Utilisez 'admin' ou 'editor'" });
+      }
+
+      const updatedUser = await storage.updateAdminUser(id, { username, role });
+
+      if (!updatedUser) {
+        return res.status(404).json({ error: "Utilisateur non trouvé" });
+      }
+
+      logger.info(`Admin user updated: ${id}`);
+      return res.json(updatedUser);
+    } catch (error) {
+      logger.error("Update user error", undefined, error);
+      return res.status(500).json({ error: "Erreur lors de la mise à jour de l'utilisateur" });
+    }
+  });
+
+  // Delete an admin user
+  app.delete("/api/admin/users/:id", requireAuth, async (req, res) => {
+    try {
+      // Only admins can delete users
+      if (req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Accès non autorisé" });
+      }
+
+      const { id } = req.params;
+
+      // Prevent self-deletion
+      if (id === req.user.userId) {
+        return res.status(400).json({ error: "Vous ne pouvez pas supprimer votre propre compte" });
+      }
+
+      await storage.deleteAdminUser(id);
+
+      logger.info(`Admin user deleted: ${id}`);
+      return res.json({ success: true });
+    } catch (error) {
+      logger.error("Delete user error", undefined, error);
+      return res.status(500).json({ error: "Erreur lors de la suppression de l'utilisateur" });
     }
   });
 
@@ -240,7 +480,7 @@ async function startServer() {
       const stats = await storage.getDashboardStats();
       return res.json(stats);
     } catch (error) {
-      console.error("Stats error:", error);
+      logger.error("Stats error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération des statistiques" });
     }
   });
@@ -253,7 +493,7 @@ async function startServer() {
       const articles = await storage.getArticles();
       return res.json({ items: articles, total: articles.length });
     } catch (error) {
-      console.error("Articles list error:", error);
+      logger.error("Articles list error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération des articles" });
     }
   });
@@ -267,7 +507,7 @@ async function startServer() {
       }
       return res.json(article);
     } catch (error) {
-      console.error("Article get error:", error);
+      logger.error("Article get error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération de l'article" });
     }
   });
@@ -278,7 +518,7 @@ async function startServer() {
       const article = await storage.createArticle(req.body);
       return res.status(201).json(article);
     } catch (error) {
-      console.error("Article create error:", error);
+      logger.error("Article create error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la création de l'article" });
     }
   });
@@ -292,7 +532,7 @@ async function startServer() {
       }
       return res.json(article);
     } catch (error) {
-      console.error("Article update error:", error);
+      logger.error("Article update error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la mise à jour de l'article" });
     }
   });
@@ -308,7 +548,7 @@ async function startServer() {
       }
       return res.json(article);
     } catch (error) {
-      console.error("Article featured toggle error:", error);
+      logger.error("Article featured toggle error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la mise à jour" });
     }
   });
@@ -322,7 +562,7 @@ async function startServer() {
       }
       return res.json({ success: true });
     } catch (error) {
-      console.error("Article delete error:", error);
+      logger.error("Article delete error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la suppression" });
     }
   });
@@ -335,8 +575,20 @@ async function startServer() {
       const categories = await storage.getCategories();
       return res.json(categories);
     } catch (error) {
-      console.error("Categories list error:", error);
+      logger.error("Categories list error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération des catégories" });
+    }
+  });
+
+  // Create category
+  app.post("/api/admin/categories", requireAuth, async (req, res) => {
+    try {
+      const category = await storage.createCategory(req.body);
+      return res.status(201).json(category);
+    } catch (error) {
+      logger.error("Category create error", undefined, error);
+      const message = error instanceof Error ? error.message : "Erreur lors de la création";
+      return res.status(500).json({ error: message });
     }
   });
 
@@ -349,8 +601,22 @@ async function startServer() {
       }
       return res.json(category);
     } catch (error) {
-      console.error("Category update error:", error);
+      logger.error("Category update error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la mise à jour" });
+    }
+  });
+
+  // Delete category
+  app.delete("/api/admin/categories/:id", requireAuth, async (req, res) => {
+    try {
+      const deleted = await storage.deleteCategory(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Catégorie non trouvée" });
+      }
+      return res.json({ success: true });
+    } catch (error) {
+      logger.error("Category delete error", undefined, error);
+      return res.status(500).json({ error: "Erreur lors de la suppression" });
     }
   });
 
@@ -362,7 +628,7 @@ async function startServer() {
       const dossiers = await storage.getDossiers();
       return res.json(dossiers);
     } catch (error) {
-      console.error("Dossiers list error:", error);
+      logger.error("Dossiers list error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération des dossiers" });
     }
   });
@@ -376,7 +642,7 @@ async function startServer() {
       }
       return res.json(dossier);
     } catch (error) {
-      console.error("Dossier get error:", error);
+      logger.error("Dossier get error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération du dossier" });
     }
   });
@@ -387,7 +653,7 @@ async function startServer() {
       const dossier = await storage.createDossier(req.body);
       return res.status(201).json(dossier);
     } catch (error) {
-      console.error("Dossier create error:", error);
+      logger.error("Dossier create error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la création du dossier" });
     }
   });
@@ -401,7 +667,7 @@ async function startServer() {
       }
       return res.json(dossier);
     } catch (error) {
-      console.error("Dossier update error:", error);
+      logger.error("Dossier update error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la mise à jour du dossier" });
     }
   });
@@ -415,7 +681,7 @@ async function startServer() {
       }
       return res.json({ success: true });
     } catch (error) {
-      console.error("Dossier delete error:", error);
+      logger.error("Dossier delete error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la suppression" });
     }
   });
@@ -428,7 +694,7 @@ async function startServer() {
       const feeds = await storage.getRSSFeeds();
       return res.json(feeds);
     } catch (error) {
-      console.error("RSS feeds list error:", error);
+      logger.error("RSS feeds list error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération des flux RSS" });
     }
   });
@@ -442,7 +708,7 @@ async function startServer() {
       }
       return res.json(feed);
     } catch (error) {
-      console.error("RSS feed get error:", error);
+      logger.error("RSS feed get error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération du flux RSS" });
     }
   });
@@ -450,14 +716,26 @@ async function startServer() {
   // Create RSS feed
   app.post("/api/admin/rss/feeds", requireAuth, async (req, res) => {
     try {
+      // Validate required fields
+      if (!req.body.name || !req.body.url) {
+        return res.status(400).json({ 
+          error: "Le nom et l'URL sont requis",
+          details: { name: !req.body.name, url: !req.body.url }
+        });
+      }
+
       const feed = await storage.createRSSFeed({
         ...req.body,
         filters: req.body.filters || {},
       });
       return res.status(201).json(feed);
     } catch (error) {
-      console.error("RSS feed create error:", error);
-      return res.status(500).json({ error: "Erreur lors de la création du flux RSS" });
+      const errorMessage = error instanceof Error ? error.message : "Erreur inconnue";
+      logger.error("RSS feed create error", undefined, error);
+      return res.status(500).json({ 
+        error: "Erreur lors de la création du flux RSS",
+        details: errorMessage
+      });
     }
   });
 
@@ -470,8 +748,12 @@ async function startServer() {
       }
       return res.json(feed);
     } catch (error) {
-      console.error("RSS feed update error:", error);
-      return res.status(500).json({ error: "Erreur lors de la mise à jour du flux RSS" });
+      const errorMessage = error instanceof Error ? error.message : "Erreur inconnue";
+      logger.error("RSS feed update error", undefined, error);
+      return res.status(500).json({ 
+        error: "Erreur lors de la mise à jour du flux RSS",
+        details: errorMessage
+      });
     }
   });
 
@@ -486,7 +768,7 @@ async function startServer() {
       await storage.deleteRSSArticlesByFeed(req.params.id);
       return res.json({ success: true });
     } catch (error) {
-      console.error("RSS feed delete error:", error);
+      logger.error("RSS feed delete error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la suppression" });
     }
   });
@@ -526,7 +808,7 @@ async function startServer() {
 
       return res.json({ success: true, newArticles });
     } catch (error) {
-      console.error("RSS feed fetch error:", error);
+      logger.error("RSS feed fetch error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération du flux" });
     }
   });
@@ -547,12 +829,36 @@ async function startServer() {
         return res.status(400).json({ error: result.error || "Flux invalide" });
       }
     } catch (error) {
-      console.error("RSS test error:", error);
+      logger.error("RSS test error", undefined, error);
       return res.status(500).json({ error: "Erreur lors du test du flux" });
     }
   });
 
   // ============ ADMIN RSS ARTICLES ============
+
+  // Helper function to map category names to valid database slugs
+  function mapCategoryToSlug(category: string | undefined): string {
+    const categoryMap: Record<string, string> = {
+      'finance': 'banque-finance',
+      'banque': 'banque-finance',
+      'economie': 'marches-investissements',
+      'économie': 'marches-investissements',
+      'actualites': 'analyses-decryptages',
+      'actualités': 'analyses-decryptages',
+      'politique': 'analyses-decryptages',
+      'technologie': 'analyses-decryptages',
+      // Also handle the valid slugs directly
+      'banque-finance': 'banque-finance',
+      'regulation-conformite': 'regulation-conformite',
+      'marches-investissements': 'marches-investissements',
+      'analyses-decryptages': 'analyses-decryptages',
+    };
+    
+    if (!category) return 'analyses-decryptages';
+    
+    const normalized = category.toLowerCase().trim();
+    return categoryMap[normalized] || 'analyses-decryptages';
+  }
 
   // List pending RSS articles
   app.get("/api/admin/rss/pending", requireAuth, async (_req, res) => {
@@ -560,7 +866,7 @@ async function startServer() {
       const articles = await storage.getRSSArticles();
       return res.json({ items: articles, total: articles.length });
     } catch (error) {
-      console.error("RSS articles list error:", error);
+      logger.error("RSS articles list error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération des articles RSS" });
     }
   });
@@ -587,7 +893,7 @@ async function startServer() {
         slug,
         excerpt: rssArticle.excerpt,
         content: rssArticle.content,
-        category: rssArticle.suggestedCategory || "analyses-decryptages",
+        category: mapCategoryToSlug(rssArticle.suggestedCategory),
         tags: rssArticle.suggestedTags || [],
         source: {
           name: rssArticle.feedName,
@@ -603,12 +909,12 @@ async function startServer() {
       await storage.updateRSSArticle(rssArticle.id, {
         status: "published",
         reviewedAt: new Date().toISOString(),
-        reviewedBy: req.user?.username,
+        reviewedBy: req.user?.userId,
       });
 
       return res.json({ success: true });
     } catch (error) {
-      console.error("RSS article approve error:", error);
+      logger.error("RSS article approve error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de l'approbation" });
     }
   });
@@ -620,7 +926,7 @@ async function startServer() {
         status: "rejected",
         rejectionReason: req.body.reason,
         reviewedAt: new Date().toISOString(),
-        reviewedBy: req.user?.username,
+        reviewedBy: req.user?.userId,
       });
 
       if (!article) {
@@ -629,7 +935,7 @@ async function startServer() {
 
       return res.json({ success: true });
     } catch (error) {
-      console.error("RSS article reject error:", error);
+      logger.error("RSS article reject error", undefined, error);
       return res.status(500).json({ error: "Erreur lors du rejet" });
     }
   });
@@ -659,7 +965,7 @@ async function startServer() {
           slug,
           excerpt: excerpt || rssArticle.excerpt,
           content: content || rssArticle.content,
-          category: category || rssArticle.suggestedCategory || "analyses-decryptages",
+          category: mapCategoryToSlug(category || rssArticle.suggestedCategory),
           tags: rssArticle.suggestedTags || [],
           source: {
             name: rssArticle.feedName,
@@ -674,14 +980,224 @@ async function startServer() {
         await storage.updateRSSArticle(rssArticle.id, {
           status: "published",
           reviewedAt: new Date().toISOString(),
-          reviewedBy: req.user?.username,
+          reviewedBy: req.user?.userId,
         });
       }
 
       return res.json({ success: true });
     } catch (error) {
-      console.error("RSS article edit error:", error);
+      logger.error("RSS article edit error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la modification" });
+    }
+  });
+
+  // ============ SITEMAP ============
+
+  // Helper function to escape XML special characters
+  function escapeXml(str: string): string {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+  }
+
+  // Dynamic sitemap generation with images
+  app.get("/sitemap.xml", async (_req, res) => {
+    try {
+      const baseUrl = process.env.SITE_URL || "https://flashinfoafrique.com";
+      
+      // Get all published articles
+      const articles = await storage.getArticles();
+      const publishedArticles = articles.filter((a) => a.status === "published");
+      
+      // Get all active dossiers
+      const dossiers = await storage.getDossiers();
+      const activeDossiers = dossiers.filter((d) => d.isActive);
+      
+      // Get all categories
+      const categories = await storage.getCategories();
+
+      // Find most recent update date for homepage
+      const mostRecentArticle = publishedArticles.sort((a, b) => 
+        new Date(b.updatedAt || b.publishedAt).getTime() - new Date(a.updatedAt || a.publishedAt).getTime()
+      )[0];
+      const homepageLastmod = mostRecentArticle 
+        ? new Date(mostRecentArticle.updatedAt || mostRecentArticle.publishedAt).toISOString().split("T")[0]
+        : new Date().toISOString().split("T")[0];
+      
+      // Build sitemap XML with image support
+      let sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+  
+  <!-- Homepage -->
+  <url>
+    <loc>${baseUrl}/</loc>
+    <lastmod>${homepageLastmod}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>${baseUrl}/og-image.svg</image:loc>
+      <image:title>Flash Info Afrique - Actualité économique UEMOA</image:title>
+      <image:caption>Votre source d'information sur l'actualité économique et financière de la zone UEMOA - Dossier FIDELIS Finance Burkina Faso et Côte d'Ivoire</image:caption>
+    </image:image>
+  </url>`;
+
+      // Add categories with lastmod
+      for (const category of categories) {
+        // Find most recent article in this category
+        const categoryArticles = publishedArticles.filter(a => a.category === category.slug);
+        const latestCategoryArticle = categoryArticles.sort((a, b) => 
+          new Date(b.updatedAt || b.publishedAt).getTime() - new Date(a.updatedAt || a.publishedAt).getTime()
+        )[0];
+        const categoryLastmod = latestCategoryArticle
+          ? new Date(latestCategoryArticle.updatedAt || latestCategoryArticle.publishedAt).toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0];
+
+        sitemap += `
+  <url>
+    <loc>${baseUrl}/categorie/${category.slug}</loc>
+    <lastmod>${categoryLastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>`;
+      }
+
+      // Add dossiers with lastmod
+      for (const dossier of activeDossiers) {
+        const dossierLastmod = new Date(dossier.updatedAt).toISOString().split("T")[0];
+        sitemap += `
+  <url>
+    <loc>${baseUrl}/dossier/${dossier.slug}</loc>
+    <lastmod>${dossierLastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>`;
+      }
+
+      // Add articles with images
+      for (const article of publishedArticles) {
+        const lastmod = article.updatedAt || article.publishedAt;
+        const date = new Date(lastmod).toISOString().split("T")[0];
+        const escapedTitle = escapeXml(article.title);
+        const escapedExcerpt = escapeXml(article.excerpt || "");
+        
+        sitemap += `
+  <url>
+    <loc>${baseUrl}/article/${article.slug}</loc>
+    <lastmod>${date}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>`;
+
+        // Add image if available
+        if (article.imageUrl) {
+          sitemap += `
+    <image:image>
+      <image:loc>${escapeXml(article.imageUrl)}</image:loc>
+      <image:title>${escapedTitle}</image:title>
+      <image:caption>${escapedExcerpt}</image:caption>
+    </image:image>`;
+        }
+
+        sitemap += `
+  </url>`;
+      }
+
+      sitemap += `
+</urlset>`;
+
+      res.setHeader("Content-Type", "application/xml");
+      res.setHeader("Cache-Control", "public, max-age=3600"); // Cache for 1 hour
+      return res.send(sitemap);
+    } catch (error) {
+      logger.error("Sitemap generation error", undefined, error);
+      // Return a basic sitemap on error
+      const baseUrl = process.env.SITE_URL || "https://flashinfoafrique.com";
+      const basicSitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${baseUrl}/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>`;
+      res.setHeader("Content-Type", "application/xml");
+      return res.send(basicSitemap);
+    }
+  });
+
+  // Google News Sitemap for recent articles (last 2 days)
+  app.get("/news-sitemap.xml", async (_req, res) => {
+    try {
+      const baseUrl = process.env.SITE_URL || "https://flashinfoafrique.com";
+      
+      // Get all published articles
+      const articles = await storage.getArticles();
+      const publishedArticles = articles.filter((a) => a.status === "published");
+      
+      // Filter articles from the last 2 days
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      
+      const recentArticles = publishedArticles.filter((a) => {
+        const publishDate = new Date(a.publishedAt);
+        return publishDate >= twoDaysAgo;
+      });
+      
+      // Build news sitemap XML
+      let newsSitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">`;
+
+      for (const article of recentArticles) {
+        const pubDate = new Date(article.publishedAt).toISOString();
+        const escapedTitle = escapeXml(article.title);
+        const keywords = article.tags.map(t => escapeXml(t)).join(", ");
+        
+        newsSitemap += `
+  <url>
+    <loc>${baseUrl}/article/${article.slug}</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Flash Info Afrique</news:name>
+        <news:language>fr</news:language>
+      </news:publication>
+      <news:publication_date>${pubDate}</news:publication_date>
+      <news:title>${escapedTitle}</news:title>
+      <news:keywords>${keywords}</news:keywords>
+    </news:news>`;
+
+        // Add image if available
+        if (article.imageUrl) {
+          newsSitemap += `
+    <image:image>
+      <image:loc>${escapeXml(article.imageUrl)}</image:loc>
+      <image:title>${escapedTitle}</image:title>
+    </image:image>`;
+        }
+
+        newsSitemap += `
+  </url>`;
+      }
+
+      newsSitemap += `
+</urlset>`;
+
+      res.setHeader("Content-Type", "application/xml");
+      res.setHeader("Cache-Control", "public, max-age=1800"); // Cache for 30 minutes
+      return res.send(newsSitemap);
+    } catch (error) {
+      logger.error("News sitemap generation error", undefined, error);
+      const basicSitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+</urlset>`;
+      res.setHeader("Content-Type", "application/xml");
+      return res.send(basicSitemap);
     }
   });
 
@@ -701,14 +1217,31 @@ async function startServer() {
     })
   );
 
-  // Handle client-side routing - serve index.html for all routes
-  app.get("*", (_req, res) => {
-    res.sendFile(path.join(staticPath, "index.html"));
+  // Handle client-side routing - serve index.html for all non-API routes
+  // This catch-all must be after all API routes to avoid capturing them
+  app.get("*", (req, res, next) => {
+    // Don't serve index.html for API routes - they should return 404 if not matched
+    if (req.path.startsWith("/api/")) {
+      return res.status(404).json({ error: "Endpoint non trouvé" });
+    }
+    
+    // Don't serve index.html for sitemap and robots.txt (already handled above)
+    if (req.path === "/sitemap.xml" || req.path === "/news-sitemap.xml" || req.path === "/robots.txt") {
+      return next();
+    }
+
+    // Serve index.html for client-side routing
+    res.sendFile(path.join(staticPath, "index.html"), (err) => {
+      if (err) {
+        logger.error("Error serving index.html", { path: req.path }, err);
+        res.status(500).send("Erreur serveur");
+      }
+    });
   });
 
   // Global error handler
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error("Server error:", err);
+    logger.error("Server error", undefined, err);
     res.status(500).json({ error: "Une erreur serveur est survenue." });
   });
 
@@ -716,8 +1249,8 @@ async function startServer() {
   const port = process.env.PORT || (process.env.NODE_ENV === "production" ? 3000 : 3001);
 
   server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+    logger.info(`Server running on http://localhost:${port}/`);
   });
 }
 
-startServer().catch(console.error);
+startServer().catch((error) => logger.error("Failed to start server", undefined, error));

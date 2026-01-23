@@ -1,4 +1,5 @@
 import ArticleCard from "@/components/ArticleCard";
+import FeaturedCarousel from "@/components/FeaturedCarousel";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import SEO from "@/components/SEO";
@@ -18,16 +19,44 @@ export default function Home() {
   const [email, setEmail] = useState("");
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [displayedCount, setDisplayedCount] = useState(6);
 
   // Séparer les articles featured et réguliers
-  const featuredArticles = articles.filter((a) => a.isFeatured).slice(0, 2);
+  // Trier par ordre de priorité (champ order), puis par date de publication
+  const featuredArticles = articles
+    .filter((a) => a.isFeatured)
+    .sort((a, b) => {
+      // Si les deux ont un ordre défini, trier par ordre croissant (1 = priorité haute)
+      if (a.order !== undefined && b.order !== undefined) {
+        return a.order - b.order;
+      }
+      // Si seul a a un ordre, il passe en premier
+      if (a.order !== undefined) return -1;
+      // Si seul b a un ordre, il passe en premier
+      if (b.order !== undefined) return 1;
+      // Sinon, trier par date de publication (plus récent en premier)
+      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+    });
   
   // Filter articles by category
   const filteredArticles = activeCategory
     ? articles.filter((a) => a.category === activeCategory && !a.isFeatured)
     : articles.filter((a) => !a.isFeatured);
   
-  const regularArticles = filteredArticles.slice(0, 6);
+  const regularArticles = filteredArticles.slice(0, displayedCount);
+  const hasMore = filteredArticles.length > displayedCount;
+  const remainingCount = filteredArticles.length - displayedCount;
+
+  // Handler for category change - reset displayed count
+  const handleCategoryChange = (categoryId: string | null) => {
+    setActiveCategory(categoryId);
+    setDisplayedCount(6);
+  };
+
+  // Handler for loading more articles
+  const handleLoadMore = () => {
+    setDisplayedCount((prev) => prev + 6);
+  };
 
   // Articles FIDELIS pour l'encart spécial
   const fidelisArticles = articles.filter((a) =>
@@ -97,30 +126,35 @@ export default function Home() {
           Aller au contenu principal
         </a>
 
-        {/* Hero Section - Featured Article */}
-        <section id="main-content" className="container py-8" aria-label="Article à la une">
-          {featuredArticles[0] && (
-            <ArticleCard article={featuredArticles[0]} featured />
-          )}
-        </section>
+        {/* Hero Section - Featured Articles Carousel */}
+        {featuredArticles.length > 0 && (
+          <section id="main-content" className="container py-8" aria-label="Articles à la une">
+            <FeaturedCarousel articles={featuredArticles} />
+          </section>
+        )}
 
         {/* Dossier FIDELIS - Encart spécial */}
-        <section className="bg-gradient-to-br from-primary/5 to-secondary/5 py-12 border-y border-border" aria-labelledby="fidelis-heading">
+        <section className="bg-gradient-to-br from-primary/5 to-secondary/5 py-8 sm:py-12 border-y border-border" aria-labelledby="fidelis-heading">
           <div className="container">
-            <div className="flex items-center gap-3 mb-6">
+            <div className="flex items-start sm:items-center gap-3 mb-4 sm:mb-6">
               <AlertCircle className="h-6 w-6 text-secondary" aria-hidden="true" />
-              <h2 id="fidelis-heading" className="text-3xl font-bold text-foreground font-['Sora']">
-                Dossier spécial : FIDELIS Finance
+              <h2 id="fidelis-heading" className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground font-['Sora']">
+                Dossier spécial : FIDELIS Finance Burkina Faso
               </h2>
             </div>
-            <p className="text-muted-foreground mb-8 max-w-3xl">
-              Suivez l'évolution du dossier FIDELIS Finance, accusé de
-              violation du secret bancaire dans l'UEMOA. Un cas inédit qui
-              pourrait créer la première jurisprudence pénale en la matière
-              dans la zone.
+            <p className="text-muted-foreground mb-4 max-w-3xl">
+              Suivez l'évolution du dossier <strong>FIDELIS Finance</strong>, établissement financier 
+              basé au <strong>Burkina Faso</strong> avec une succursale à <strong>Abidjan</strong>, 
+              accusé de violation du secret bancaire en <strong>Côte d'Ivoire</strong>. 
+              Un cas inédit qui pourrait créer la première jurisprudence pénale en la matière dans l'UEMOA.
+            </p>
+            <p className="text-sm text-muted-foreground mb-8 max-w-3xl">
+              Cette affaire oppose la PME ivoirienne SOGETRA à Fidelis Finance Abidjan et 
+              Fidelis Finance Côte d'Ivoire. Quatre dirigeants sont mis en examen pour 
+              violation présumée du secret bancaire, destruction de preuves et subornation de témoin.
             </p>
 
-            <div className="grid md:grid-cols-3 gap-6 mb-8">
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
               {fidelisArticles.slice(0, 3).map((article) => (
                 <ArticleCard key={article.id} article={article} />
               ))}
@@ -138,26 +172,26 @@ export default function Home() {
         </section>
 
         {/* Dernières actualités */}
-        <section className="container py-12" aria-labelledby="news-heading">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
+        <section className="container py-8 sm:py-12" aria-labelledby="news-heading">
+          <div className="flex items-center justify-between mb-6 sm:mb-8">
+            <div className="flex items-center gap-2 sm:gap-3">
               <TrendingUp className="h-6 w-6 text-primary" aria-hidden="true" />
-              <h2 id="news-heading" className="text-3xl font-bold text-foreground font-['Sora']">
+              <h2 id="news-heading" className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground font-['Sora']">
                 Dernières actualités
               </h2>
             </div>
           </div>
 
           {/* Catégories tabs */}
-          <div className="flex flex-wrap gap-2 mb-8" role="tablist" aria-label="Filtrer par catégorie">
+          <div className="flex flex-wrap gap-2 mb-6 sm:mb-8" role="tablist" aria-label="Filtrer par catégorie">
             <Badge
               variant={activeCategory === null ? "default" : "outline"}
-              className="px-4 py-2 cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
-              onClick={() => setActiveCategory(null)}
+              className="px-4 py-2.5 min-h-[44px] cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors flex items-center"
+              onClick={() => handleCategoryChange(null)}
               role="tab"
               aria-selected={activeCategory === null}
               tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && setActiveCategory(null)}
+              onKeyDown={(e) => e.key === "Enter" && handleCategoryChange(null)}
             >
               Toutes
             </Badge>
@@ -165,17 +199,17 @@ export default function Home() {
               <Badge
                 key={category.id}
                 variant={activeCategory === category.id ? "default" : "outline"}
-                className="px-4 py-2 cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                className="px-4 py-2.5 min-h-[44px] cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors flex items-center"
                 style={
                   activeCategory !== category.id
                     ? { borderColor: category.color, color: category.color }
                     : {}
                 }
-                onClick={() => setActiveCategory(category.id)}
+                onClick={() => handleCategoryChange(category.id)}
                 role="tab"
                 aria-selected={activeCategory === category.id}
                 tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && setActiveCategory(category.id)}
+                onKeyDown={(e) => e.key === "Enter" && handleCategoryChange(category.id)}
               >
                 {category.name}
               </Badge>
@@ -183,7 +217,7 @@ export default function Home() {
           </div>
 
           {/* Articles grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6" role="tabpanel">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6" role="tabpanel">
             {regularArticles.length > 0 ? (
               regularArticles.map((article) => (
                 <ArticleCard key={article.id} article={article} />
@@ -196,13 +230,49 @@ export default function Home() {
               </div>
             )}
           </div>
+
+          {/* Load more / View all articles button */}
+          {regularArticles.length > 0 && hasMore && (
+            <div className="flex justify-center mt-8">
+              {remainingCount > 6 ? (
+                <Button 
+                  size="lg" 
+                  variant="outline" 
+                  onClick={handleLoadMore}
+                  className="group"
+                >
+                  Afficher plus d'articles
+                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                </Button>
+              ) : (
+                <Link href="/articles">
+                  <Button size="lg" className="group">
+                    Voir tous les articles
+                    <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                  </Button>
+                </Link>
+              )}
+            </div>
+          )}
+
+          {/* Link to all articles when all are displayed */}
+          {regularArticles.length > 0 && !hasMore && filteredArticles.length > 6 && (
+            <div className="flex justify-center mt-8">
+              <Link href="/articles">
+                <Button size="lg" variant="outline" className="group">
+                  Voir tous les articles
+                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                </Button>
+              </Link>
+            </div>
+          )}
         </section>
 
         {/* Newsletter Section */}
-        <section className="bg-gradient-to-br from-primary to-primary/80 py-16" aria-labelledby="newsletter-heading">
+        <section className="bg-gradient-to-br from-primary to-primary/80 py-10 sm:py-16" aria-labelledby="newsletter-heading">
           <div className="container">
             <Card className="max-w-2xl mx-auto border-none shadow-2xl">
-              <CardContent className="p-8 text-center">
+              <CardContent className="p-5 sm:p-8 text-center">
                 <div className="flex justify-center mb-4">
                   <div className="p-3 bg-primary/10 rounded-full">
                     <Mail className="h-8 w-8 text-primary" aria-hidden="true" />
@@ -219,14 +289,14 @@ export default function Home() {
                   <Input
                     type="email"
                     placeholder="votre@email.com"
-                    className="flex-1"
+                    className="flex-1 min-h-[44px]"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={isSubscribing}
                     aria-label="Adresse email pour la newsletter"
                     required
                   />
-                  <Button type="submit" size="lg" disabled={isSubscribing}>
+                  <Button type="submit" size="lg" disabled={isSubscribing} className="min-h-[44px]">
                     {isSubscribing ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
@@ -246,42 +316,42 @@ export default function Home() {
         </section>
 
         {/* Stats Section */}
-        <section className="container py-12" aria-label="Statistiques">
-          <div className="grid md:grid-cols-4 gap-6">
+        <section className="container py-8 sm:py-12" aria-label="Statistiques">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
             <Card>
-              <CardContent className="p-6 text-center">
-                <div className="text-4xl font-bold text-primary mb-2 font-['Sora']">
+              <CardContent className="p-4 sm:p-6 text-center">
+                <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-primary mb-1 sm:mb-2 font-['Sora']">
                   {fidelisArticles.length}+
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Articles sur FIDELIS
                 </p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-6 text-center">
-                <div className="text-4xl font-bold text-secondary mb-2 font-['Sora']">
+              <CardContent className="p-4 sm:p-6 text-center">
+                <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-secondary mb-1 sm:mb-2 font-['Sora']">
                   {new Set(articles.map((a) => a.source.name)).size}
                 </div>
-                <p className="text-sm text-muted-foreground">Médias sources</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Médias sources</p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-6 text-center">
-                <div className="text-4xl font-bold text-accent mb-2 font-['Sora']">
+              <CardContent className="p-4 sm:p-6 text-center">
+                <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-accent mb-1 sm:mb-2 font-['Sora']">
                   {categories.length}
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Catégories
                 </p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-6 text-center">
-                <div className="text-4xl font-bold text-primary mb-2 font-['Sora']">
+              <CardContent className="p-4 sm:p-6 text-center">
+                <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-primary mb-1 sm:mb-2 font-['Sora']">
                   UEMOA
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Zone de couverture
                 </p>
               </CardContent>

@@ -95,10 +95,13 @@ export interface RSSArticle {
 }
 
 // Utilisateur admin
+export type AdminRole = "admin" | "editor";
+
 export interface AdminUser {
   id: string;
   username: string;
-  role: "admin";
+  email?: string;
+  role: AdminRole;
   createdAt: string;
 }
 

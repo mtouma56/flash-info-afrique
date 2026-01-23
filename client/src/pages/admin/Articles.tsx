@@ -236,7 +236,7 @@ export default function AdminArticles() {
 
         {/* Tableau des articles */}
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             {isLoading ? (
               <div className="flex items-center justify-center h-64">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -280,22 +280,29 @@ export default function AdminArticles() {
                   {filteredArticles.map((article) => (
                     <TableRow key={article.id}>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleToggleFeatured(article)}
-                          className={
-                            article.isFeatured
-                              ? "text-yellow-500"
-                              : "text-muted-foreground"
-                          }
-                        >
-                          {article.isFeatured ? (
-                            <Star className="h-4 w-4 fill-current" />
-                          ) : (
-                            <StarOff className="h-4 w-4" />
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleToggleFeatured(article)}
+                            className={
+                              article.isFeatured
+                                ? "text-yellow-500"
+                                : "text-muted-foreground"
+                            }
+                          >
+                            {article.isFeatured ? (
+                              <Star className="h-4 w-4 fill-current" />
+                            ) : (
+                              <StarOff className="h-4 w-4" />
+                            )}
+                          </Button>
+                          {article.isFeatured && article.order !== undefined && (
+                            <span className="text-xs font-medium text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-400 px-1.5 py-0.5 rounded">
+                              #{article.order}
+                            </span>
                           )}
-                        </Button>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
@@ -388,7 +395,7 @@ export default function AdminArticles() {
         </Card>
 
         {/* Statistiques */}
-        <div className="flex gap-4 text-sm text-muted-foreground">
+        <div className="flex flex-wrap gap-2 sm:gap-4 text-sm text-muted-foreground">
           <span>
             {filteredArticles.length} article
             {filteredArticles.length > 1 ? "s" : ""}

@@ -166,6 +166,34 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          // Vendor chunks
+          if (id.includes("node_modules")) {
+            // React and React DOM
+            if (id.includes("react") || id.includes("react-dom")) {
+              return "vendor-react";
+            }
+            // Radix UI components
+            if (id.includes("@radix-ui")) {
+              return "vendor-radix";
+            }
+            // Framer Motion
+            if (id.includes("framer-motion")) {
+              return "vendor-framer";
+            }
+            // Other large vendors
+            if (id.includes("recharts")) {
+              return "vendor-charts";
+            }
+            // All other node_modules
+            return "vendor";
+          }
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600, // Increase limit slightly since we're splitting better
   },
   server: {
     port: 3000,
@@ -187,6 +215,17 @@ export default defineConfig({
     // Proxy API requests to Express server in development
     proxy: {
       "/api": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+        secure: false,
+      },
+      // Proxy sitemap and robots.txt to Express server
+      "/sitemap.xml": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+        secure: false,
+      },
+      "/news-sitemap.xml": {
         target: "http://localhost:3001",
         changeOrigin: true,
         secure: false,

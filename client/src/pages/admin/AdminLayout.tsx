@@ -14,6 +14,7 @@ import {
   Rss,
   Settings,
   Tag,
+  Users,
   X,
   ChevronRight,
 } from "lucide-react";
@@ -70,6 +71,7 @@ export default function AdminLayout({
       icon: Rss,
       badge: pendingRSSCount > 0 ? pendingRSSCount : undefined,
     },
+    { name: "Utilisateurs", href: "/admin/users", icon: Users, adminOnly: true },
     { name: "Paramètres", href: "/admin/settings", icon: Settings },
   ];
 
@@ -84,13 +86,12 @@ export default function AdminLayout({
       <div className="p-6 border-b border-border">
         <Link href="/admin">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <span className="text-lg font-bold text-primary">F</span>
-            </div>
+            <img 
+              src="/logo.png" 
+              alt="Flash Info Afrique" 
+              className="h-10 w-auto object-contain"
+            />
             <div>
-              <h1 className="text-lg font-bold leading-tight">
-                Flash Info Afrique
-              </h1>
               <p className="text-xs text-muted-foreground">Administration</p>
             </div>
           </div>
@@ -100,31 +101,33 @@ export default function AdminLayout({
       {/* Navigation */}
       <ScrollArea className="flex-1 py-4">
         <nav className="px-3 space-y-1">
-          {navigation.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href, item.exact);
-            return (
-              <Link key={item.href} href={item.href}>
-                <Button
-                  variant={active ? "secondary" : "ghost"}
-                  className={`w-full justify-start gap-3 ${
-                    active ? "font-medium" : ""
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="flex-1 text-left">{item.name}</span>
-                  {item.badge && (
-                    <Badge
-                      variant="destructive"
-                      className="h-5 min-w-5 px-1.5 text-xs"
-                    >
-                      {item.badge}
-                    </Badge>
-                  )}
-                </Button>
-              </Link>
-            );
-          })}
+          {navigation
+            .filter((item) => !item.adminOnly || user?.role === "admin")
+            .map((item) => {
+              const Icon = item.icon;
+              const active = isActive(item.href, item.exact);
+              return (
+                <Link key={item.href} href={item.href}>
+                  <Button
+                    variant={active ? "secondary" : "ghost"}
+                    className={`w-full justify-start gap-3 ${
+                      active ? "font-medium" : ""
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="flex-1 text-left">{item.name}</span>
+                    {item.badge && (
+                      <Badge
+                        variant="destructive"
+                        className="h-5 min-w-5 px-1.5 text-xs"
+                      >
+                        {item.badge}
+                      </Badge>
+                    )}
+                  </Button>
+                </Link>
+              );
+            })}
         </nav>
       </ScrollArea>
 
@@ -141,7 +144,9 @@ export default function AdminLayout({
 
         <div className="px-3 py-2">
           <p className="text-sm font-medium">{user?.username || "Admin"}</p>
-          <p className="text-xs text-muted-foreground">Administrateur</p>
+          <p className="text-xs text-muted-foreground">
+            {user?.role === "admin" ? "Administrateur" : "Éditeur"}
+          </p>
         </div>
 
         <Button
@@ -164,10 +169,12 @@ export default function AdminLayout({
           variant="ghost"
           size="icon"
           onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="h-11 w-11 min-h-[44px] min-w-[44px]"
+          aria-label={sidebarOpen ? "Fermer le menu" : "Ouvrir le menu"}
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <span className="ml-3 font-semibold">Administration</span>
+        <span className="ml-3 font-semibold text-sm sm:text-base truncate">Administration</span>
       </div>
 
       {/* Mobile sidebar overlay */}
@@ -202,7 +209,7 @@ export default function AdminLayout({
         <main className="min-h-screen pt-16 lg:pt-0">
           {/* Page header */}
           {(title || description) && (
-            <div className="bg-background border-b border-border px-6 py-6">
+            <div className="bg-background border-b border-border px-4 sm:px-6 py-4 sm:py-6">
               <div className="max-w-7xl mx-auto">
                 {/* Breadcrumb */}
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
@@ -218,7 +225,7 @@ export default function AdminLayout({
                 </div>
 
                 {title && (
-                  <h1 className="text-2xl font-bold text-foreground">
+                  <h1 className="text-xl sm:text-2xl font-bold text-foreground">
                     {title}
                   </h1>
                 )}
@@ -230,7 +237,7 @@ export default function AdminLayout({
           )}
 
           {/* Page content */}
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <div className="max-w-7xl mx-auto">{children}</div>
           </div>
         </main>

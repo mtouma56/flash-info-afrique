@@ -176,12 +176,12 @@ export default function AdminRSS() {
 
         {/* Onglet Flux */}
         <TabsContent value="feeds" className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <p className="text-muted-foreground">
               {feeds.length} flux configuré{feeds.length > 1 ? "s" : ""}
             </p>
             <Link href="/admin/rss/feeds/new">
-              <Button>
+              <Button className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
                 Ajouter un flux
               </Button>
@@ -215,32 +215,32 @@ export default function AdminRSS() {
                   className={`${!feed.enabled ? "opacity-60" : ""}`}
                 >
                   <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-1">
-                          <CardTitle className="text-lg truncate">
+                    <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">
+                      <div className="flex-1 min-w-0 w-full sm:w-auto">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1">
+                          <CardTitle className="text-base sm:text-lg truncate">
                             {feed.name}
                           </CardTitle>
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-1 sm:gap-2">
                             {!feed.enabled && (
                               <Badge variant="secondary">Désactivé</Badge>
                             )}
                             {feed.autoPublish ? (
-                              <Badge variant="outline" className="text-green-600 border-green-600">
-                                Auto-publié
+                              <Badge variant="outline" className="text-blue-600 border-blue-600 text-xs">
+                                Pré-approuvé
                               </Badge>
                             ) : (
-                              <Badge variant="outline" className="text-orange-600 border-orange-600">
-                                Modération
+                              <Badge variant="outline" className="text-orange-600 border-orange-600 text-xs">
+                                Modération requise
                               </Badge>
                             )}
                           </div>
                         </div>
-                        <CardDescription className="truncate">
+                        <CardDescription className="truncate text-xs sm:text-sm">
                           {feed.url}
                         </CardDescription>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 self-end sm:self-start">
                         <Switch
                           checked={feed.enabled}
                           onCheckedChange={() => handleToggleEnabled(feed)}

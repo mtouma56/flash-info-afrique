@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Save,
   Eye,
+  EyeOff,
   Plus,
   Trash2,
   GripVertical,
@@ -399,14 +400,23 @@ export default function DossierEdit() {
 
           {/* Colonne latérale */}
           <div className="space-y-6">
-            {/* Statut */}
+            {/* Visibilité */}
             <Card>
               <CardHeader>
-                <CardTitle>Statut</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  {formData.isActive ? (
+                    <Eye className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <EyeOff className="h-4 w-4 text-orange-600" />
+                  )}
+                  Visibilité
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="isActive">Dossier actif</Label>
+                  <Label htmlFor="isActive" className="flex items-center gap-2">
+                    Afficher sur le site
+                  </Label>
                   <Switch
                     id="isActive"
                     checked={formData.isActive}
@@ -415,9 +425,17 @@ export default function DossierEdit() {
                     }
                   />
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Les dossiers inactifs ne sont pas visibles sur le site
-                </p>
+                <div className={`mt-3 p-2 rounded-md text-xs ${
+                  formData.isActive 
+                    ? "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400" 
+                    : "bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400"
+                }`}>
+                  {formData.isActive ? (
+                    <>Ce dossier est visible sur le site public.</>
+                  ) : (
+                    <>Ce dossier est masqué du site public mais reste accessible dans l'administration.</>
+                  )}
+                </div>
               </CardContent>
             </Card>
 

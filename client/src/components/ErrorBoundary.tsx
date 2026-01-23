@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { captureError } from "@/lib/sentry";
 import { AlertTriangle, Home, RotateCcw } from "lucide-react";
 import { Component, ReactNode } from "react";
 
@@ -9,24 +10,30 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  eventId: string | null;
 }
 
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, eventId: null };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     // Log error to console in development
-    if (process.env.NODE_ENV === "development") {
+    if (import.meta.env.DEV) {
       console.error("ErrorBoundary caught an error:", error, errorInfo);
     }
-    // In production, you would send this to an error tracking service like Sentry
+    
+    // Send error to Sentry in production
+    captureError(error, {
+      componentStack: errorInfo.componentStack,
+      errorBoundary: true,
+    });
   }
 
   render() {
@@ -52,7 +59,7 @@ class ErrorBoundary extends Component<Props, State> {
               Nous sommes désolés pour ce désagrément. Veuillez actualiser la page ou retourner à l'accueil.
             </p>
 
-            {process.env.NODE_ENV === "development" && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <details className="w-full mb-6">
                 <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground mb-2">
                   Détails techniques (développement uniquement)

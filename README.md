@@ -25,13 +25,13 @@ Flash Info Afrique est une application web moderne qui permet de publier et gér
 
 ### Backend
 - **Express.js** avec TypeScript
-- **JWT** pour l'authentification
-- **bcrypt** pour le hachage des mots de passe
+- **Supabase** pour la base de données et l'authentification
 - **Helmet** pour la sécurité
 - **express-rate-limit** pour la protection contre les abus
 
 ### Stockage
-- Fichiers JSON pour la persistance des données (articles, dossiers, catégories, utilisateurs)
+- **Supabase PostgreSQL** pour la persistance des données
+- **Supabase Auth** pour l'authentification
 
 ### Outils de développement
 - **Vitest** pour les tests
@@ -85,16 +85,40 @@ flash-info-afrique/
    pnpm install
    ```
 
-3. **Configurer les variables d'environnement** (optionnel)
+3. **Configurer Supabase**
    
-   Créer un fichier `.env` à la racine :
+   a. Créez un projet sur [Supabase](https://supabase.com)
+   
+   b. Exécutez le schéma SQL dans l'éditeur SQL de Supabase :
+   ```bash
+   # Le fichier SQL est situé dans :
+   supabase/migrations/001_initial_schema.sql
+   ```
+   
+   c. Créer un fichier `.env` à la racine :
    ```env
-   JWT_SECRET=votre-secret-jwt-super-securise
+   # Supabase Configuration
+   SUPABASE_URL=https://votre-projet.supabase.co
+   SUPABASE_ANON_KEY=votre-anon-key
+   SUPABASE_SERVICE_ROLE_KEY=votre-service-role-key
+   
+   # Client-side (VITE_ prefix for Vite)
+   VITE_SUPABASE_URL=https://votre-projet.supabase.co
+   VITE_SUPABASE_ANON_KEY=votre-anon-key
+   
+   # Server Configuration
    PORT=3001
    NODE_ENV=development
    ```
 
-4. **Lancer le serveur de développement**
+4. **Migrer les données existantes (optionnel)**
+   
+   Si vous avez des données JSON à migrer :
+   ```bash
+   pnpm migrate:supabase
+   ```
+
+5. **Lancer le serveur de développement**
    ```bash
    pnpm dev
    ```
@@ -119,6 +143,7 @@ flash-info-afrique/
 | `pnpm check` | Vérifie les types TypeScript |
 | `pnpm format` | Formate le code avec Prettier |
 | `pnpm lint` | Vérifie les erreurs TypeScript |
+| `pnpm migrate:supabase` | Migre les données JSON vers Supabase |
 
 ## 🔐 Authentification Admin
 
@@ -129,7 +154,7 @@ Par défaut, un utilisateur admin est créé automatiquement au premier login :
 
 ⚠️ **Important** : Changez ces identifiants immédiatement en production !
 
-L'authentification utilise JWT avec un token valide 24h.
+L'authentification utilise Supabase Auth pour une gestion sécurisée des sessions.
 
 ## 📝 Fonctionnalités
 
@@ -206,8 +231,8 @@ Le build génère :
 
 ## 🔒 Sécurité
 
-- ✅ Authentification JWT sécurisée
-- ✅ Mots de passe hashés avec bcrypt
+- ✅ Authentification sécurisée via Supabase Auth
+- ✅ Row Level Security (RLS) sur toutes les tables
 - ✅ Headers de sécurité avec Helmet
 - ✅ Rate limiting sur les API
 - ✅ Validation des entrées avec Zod
@@ -219,7 +244,11 @@ Le build génère :
 ### Variables d'environnement requises
 
 ```env
-JWT_SECRET=secret-super-securise-en-production
+SUPABASE_URL=https://votre-projet.supabase.co
+SUPABASE_ANON_KEY=votre-anon-key
+SUPABASE_SERVICE_ROLE_KEY=votre-service-role-key
+VITE_SUPABASE_URL=https://votre-projet.supabase.co
+VITE_SUPABASE_ANON_KEY=votre-anon-key
 PORT=3000
 NODE_ENV=production
 ```

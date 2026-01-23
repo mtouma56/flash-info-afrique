@@ -5,23 +5,17 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="border-t border-border bg-card mt-16" role="contentinfo">
-      <div className="container py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+    <footer className="border-t border-border bg-card mt-12 sm:mt-16" role="contentinfo">
+      <div className="container py-8 sm:py-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
           {/* About */}
           <div className="col-span-1 md:col-span-2">
-            <div className="flex items-center space-x-2 mb-4">
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary">
-                <span className="text-white font-bold text-xl" aria-hidden="true">F</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-foreground font-['Sora']">
-                  Flash Info Afrique
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  L'actualité économique UEMOA
-                </p>
-              </div>
+            <div className="flex items-center mb-4">
+              <img 
+                src="/logo.png" 
+                alt="Flash Info Afrique" 
+                className="h-12 w-auto object-contain"
+              />
             </div>
             <p className="text-sm text-muted-foreground max-w-md">
               Flash Info Afrique est un média d'information spécialisé dans
@@ -109,18 +103,18 @@ export default function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="mt-8 pt-8 border-t border-border flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
-          <p className="text-sm text-muted-foreground">
+        <div className="mt-6 sm:mt-8 pt-6 sm:pt-8 border-t border-border flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
+          <p className="text-sm text-muted-foreground text-center sm:text-left">
             © {currentYear} Flash Info Afrique. Tous droits réservés.
           </p>
           <nav aria-label="Réseaux sociaux">
-            <ul className="flex items-center space-x-4">
+            <ul className="flex items-center space-x-2">
               <li>
                 <a
                   href="https://linkedin.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded p-1"
+                  className="text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded p-3 min-h-[44px] min-w-[44px] flex items-center justify-center"
                   aria-label="Suivez-nous sur LinkedIn"
                 >
                   <Linkedin className="h-5 w-5" aria-hidden="true" />
@@ -131,7 +125,7 @@ export default function Footer() {
                   href="https://facebook.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded p-1"
+                  className="text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded p-3 min-h-[44px] min-w-[44px] flex items-center justify-center"
                   aria-label="Suivez-nous sur Facebook"
                 >
                   <Facebook className="h-5 w-5" aria-hidden="true" />
@@ -142,7 +136,7 @@ export default function Footer() {
                   href="https://twitter.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded p-1"
+                  className="text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded p-3 min-h-[44px] min-w-[44px] flex items-center justify-center"
                   aria-label="Suivez-nous sur Twitter"
                 >
                   <Twitter className="h-5 w-5" aria-hidden="true" />

@@ -7,18 +7,29 @@
     <title>Flash Info Afrique - L'actualité économique UEMOA</title>
     
     <!-- SEO Meta Tags -->
-    <meta name="description" content="Flash Info Afrique - Votre source d'information sur l'actualité économique, financière et réglementaire de la zone UEMOA. Suivez les dernières nouvelles du secteur bancaire africain." />
-    <meta name="keywords" content="UEMOA, Afrique, économie, finance, banque, BCEAO, actualité africaine, FIDELIS Finance, régulation bancaire" />
+    <meta name="description" content="Flash Info Afrique - Votre source d'information sur l'actualité économique, financière et réglementaire de la zone UEMOA. Suivez les dernières nouvelles du secteur bancaire africain, incluant le dossier FIDELIS Finance Burkina Faso et Côte d'Ivoire." />
+    <meta name="keywords" content="UEMOA, Afrique, économie, finance, banque, BCEAO, actualité africaine, FIDELIS Finance, Fidelis Finance Burkina Faso, Fidelis Finance Abidjan, Fidelis Finance Côte d'Ivoire, régulation bancaire, secret bancaire, Commission Bancaire UMOA" />
     <meta name="author" content="Flash Info Afrique" />
-    <meta name="robots" content="index, follow" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <link rel="canonical" href="https://flashinfoafrique.com" />
+    
+    <!-- Geographic Meta Tags -->
+    <meta name="geo.region" content="CI" />
+    <meta name="geo.region" content="BF" />
+    <meta name="geo.placename" content="Abidjan" />
+    <meta name="geo.placename" content="Ouagadougou" />
+    <meta name="geo.position" content="6.8523;-5.2893" />
+    <meta name="ICBM" content="6.8523, -5.2893" />
     
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://flashinfoafrique.com" />
     <meta property="og:title" content="Flash Info Afrique - L'actualité économique UEMOA" />
-    <meta property="og:description" content="Votre source d'information sur l'actualité économique, financière et réglementaire de la zone UEMOA." />
-    <meta property="og:image" content="https://flashinfoafrique.com/og-image.jpg" />
+    <meta property="og:description" content="Votre source d'information sur l'actualité économique, financière et réglementaire de la zone UEMOA. Dossier FIDELIS Finance Burkina Faso et Côte d'Ivoire." />
+    <meta property="og:image" content="https://flashinfoafrique.com/og-image.svg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Flash Info Afrique - Actualité économique UEMOA" />
     <meta property="og:locale" content="fr_FR" />
     <meta property="og:site_name" content="Flash Info Afrique" />
     
@@ -26,29 +37,88 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://flashinfoafrique.com" />
     <meta name="twitter:title" content="Flash Info Afrique - L'actualité économique UEMOA" />
-    <meta name="twitter:description" content="Votre source d'information sur l'actualité économique, financière et réglementaire de la zone UEMOA." />
-    <meta name="twitter:image" content="https://flashinfoafrique.com/og-image.jpg" />
+    <meta name="twitter:description" content="Votre source d'information sur l'actualité économique, financière et réglementaire de la zone UEMOA. Dossier FIDELIS Finance." />
+    <meta name="twitter:image" content="https://flashinfoafrique.com/og-image.svg" />
+    <meta name="twitter:image:alt" content="Flash Info Afrique - Actualité économique UEMOA" />
     
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
     
     <!-- Theme Color -->
     <meta name="theme-color" content="#1E3A8A" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Flash Info Afrique" />
     
-    <!-- Google Fonts: Sora (display), Inter (body), JetBrains Mono (data) -->
+    <!-- DNS Prefetch for external resources -->
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+    
+    <!-- Preconnect to external resources -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    
+    <!-- Preload critical fonts with font-display: swap for better performance -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" />
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    </noscript>
+    
+    <!-- JetBrains Mono loaded asynchronously (not critical) -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    </noscript>
+    
+    <!-- Preload critical images for LCP optimization -->
+    <link rel="preload" as="image" href="/og-image.svg" type="image/svg+xml" />
+    <link rel="preload" as="image" href="/logo.svg" type="image/svg+xml" />
+    
+    <!-- Preload placeholder for article images -->
+    <link rel="preload" as="image" href="/placeholder-image.svg" type="image/svg+xml" />
+    
+    <!-- Additional preconnects for common image sources -->
+    <link rel="dns-prefetch" href="https://www.fidelis-finance.com" />
+    <link rel="dns-prefetch" href="https://www.financialafrik.com" />
+    <link rel="dns-prefetch" href="https://www.jeuneafrique.com" />
   </head>
 
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Analytics script (only loaded if variables are configured) -->
+    <!-- Vite will replace %VITE_ANALYTICS_ENDPOINT% and %VITE_ANALYTICS_WEBSITE_ID% at build time -->
+    <!-- If variables are not set, the script will not load (empty src) -->
     <script
       defer
-      src="%VITE_ANALYTICS_ENDPOINT%/umami"
-      data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
+      data-analytics-endpoint="%VITE_ANALYTICS_ENDPOINT%"
+      data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"
+      id="analytics-loader">
+      (function() {
+        const script = document.getElementById('analytics-loader');
+        const endpoint = script?.getAttribute('data-analytics-endpoint');
+        const websiteId = script?.getAttribute('data-website-id');
+        
+        // Only load if both variables are set and not placeholders
+        if (endpoint && websiteId && 
+            !endpoint.includes('%') && !websiteId.includes('%') &&
+            endpoint.trim() !== '' && websiteId.trim() !== '') {
+          const analyticsScript = document.createElement('script');
+          analyticsScript.defer = true;
+          analyticsScript.src = endpoint + '/umami';
+          analyticsScript.setAttribute('data-website-id', websiteId);
+          document.head.appendChild(analyticsScript);
+        }
+        // Remove the loader script
+        script?.remove();
+      })();
+    </script>
   </body>
 
 </html>

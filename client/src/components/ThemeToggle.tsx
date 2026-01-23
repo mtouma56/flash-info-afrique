@@ -18,6 +18,7 @@ export default function ThemeToggle() {
           variant="ghost"
           size="icon"
           aria-label="Changer le thème"
+          className="h-11 w-11 min-h-[44px] min-w-[44px]"
         >
           {effectiveTheme === "dark" ? (
             <Moon className="h-5 w-5" aria-hidden="true" />
@@ -29,21 +30,21 @@ export default function ThemeToggle() {
       <DropdownMenuContent align="end">
         <DropdownMenuItem
           onClick={() => setTheme("light")}
-          className={theme === "light" ? "bg-accent" : ""}
+          className={`min-h-[44px] ${theme === "light" ? "bg-accent" : ""}`}
         >
           <Sun className="mr-2 h-4 w-4" aria-hidden="true" />
           Clair
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => setTheme("dark")}
-          className={theme === "dark" ? "bg-accent" : ""}
+          className={`min-h-[44px] ${theme === "dark" ? "bg-accent" : ""}`}
         >
           <Moon className="mr-2 h-4 w-4" aria-hidden="true" />
           Sombre
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => setTheme("system")}
-          className={theme === "system" ? "bg-accent" : ""}
+          className={`min-h-[44px] ${theme === "system" ? "bg-accent" : ""}`}
         >
           <Monitor className="mr-2 h-4 w-4" aria-hidden="true" />
           Système

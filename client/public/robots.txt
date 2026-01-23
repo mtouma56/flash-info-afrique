@@ -4,8 +4,9 @@
 User-agent: *
 Allow: /
 
-# Sitemaps
+# Sitemaps (dynamically generated)
 Sitemap: https://flashinfoafrique.com/sitemap.xml
+Sitemap: https://flashinfoafrique.com/news-sitemap.xml
 
 # Disallow admin and API routes
 Disallow: /api/
@@ -15,6 +16,11 @@ Disallow: /__manus__/
 # Allow all crawlers to access the main content
 User-agent: Googlebot
 Allow: /
+Crawl-delay: 1
+
+User-agent: Googlebot-News
+Allow: /article/
+Allow: /dossier/
 
 User-agent: Bingbot
 Allow: /
@@ -26,4 +32,8 @@ User-agent: Twitterbot
 Allow: /
 
 User-agent: LinkedInBot
+Allow: /
+
+# Allow Google to read images
+User-agent: Googlebot-Image
 Allow: /

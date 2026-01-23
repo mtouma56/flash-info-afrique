@@ -57,6 +57,7 @@ export default function ArticleEdit() {
     imageUrl: "",
     publishedAt: new Date().toISOString().split("T")[0],
     isFeatured: false,
+    order: undefined as number | undefined,
     status: "draft" as "draft" | "published" | "archived",
   });
 
@@ -119,6 +120,7 @@ export default function ArticleEdit() {
           imageUrl: article.imageUrl,
           publishedAt: article.publishedAt.split("T")[0],
           isFeatured: article.isFeatured,
+          order: article.order,
           status: article.status,
         });
         setAutoSlug(false); // Désactiver l'auto-slug pour l'édition
@@ -222,6 +224,7 @@ export default function ArticleEdit() {
         imageUrl: formData.imageUrl,
         publishedAt: formData.publishedAt,
         isFeatured: formData.isFeatured,
+        order: formData.isFeatured ? formData.order : undefined,
         status: formData.status,
       };
 
@@ -472,6 +475,30 @@ export default function ArticleEdit() {
                     }
                   />
                 </div>
+
+                {/* Ordre de priorité - visible uniquement si article en vedette */}
+                {formData.isFeatured && (
+                  <div className="space-y-2 pt-4 border-t">
+                    <Label htmlFor="order">Ordre de priorité</Label>
+                    <Input
+                      id="order"
+                      type="number"
+                      min="1"
+                      placeholder="1 = priorité haute"
+                      value={formData.order ?? ""}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          order: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                        }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Les articles sont affichés par ordre croissant (1 en premier). 
+                      Laissez vide pour trier par date de publication.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
