@@ -4,7 +4,7 @@ import { supabaseAdmin } from "../lib/supabase";
 import type { RSSFeed } from "../../shared/types/admin";
 
 const parser = new Parser({
-  timeout: 20000,
+  timeout: 15000, // Reduced from 20s to 15s to prevent slow feeds from blocking
   headers: {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/rss+xml, application/xml, text/xml, */*",
@@ -17,6 +17,33 @@ const parser = new Parser({
     ],
   },
 });
+
+// Concurrency limit for parallel RSS scraping
+const CONCURRENCY_LIMIT = 3;
+
+/**
+ * Process items in parallel with concurrency control
+ */
+async function processWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = [];
+  
+  for (let i = 0; i < items.length; i += limit) {
+    const batch = items.slice(i, i + limit);
+    const batchResults = await Promise.all(
+      batch.map(item => fn(item).catch(error => {
+        console.error("[RSS Auto] Error in concurrent processing:", error.message);
+        return null as unknown as R;
+      }))
+    );
+    results.push(...batchResults.filter(r => r !== null));
+  }
+  
+  return results;
+}
 
 interface RSSSource {
   id: string;
@@ -164,7 +191,7 @@ export function extractTags(title: string, content: string): string[] {
   if (text.includes("bourse") || text.includes("marché financier")) tags.push("Marchés");
   if (text.includes("régulation") || text.includes("réglementation")) tags.push("Régulation");
 
-  return [...new Set(tags)]; // Remove duplicates
+  return Array.from(new Set(tags)); // Remove duplicates
 }
 
 /**
@@ -428,7 +455,30 @@ export async function scrapeAllSources(): Promise<{
     };
   }
 
-  // Scrape each source
+  // Convert sources to RSSSource format
+  const rssSources: RSSSource[] = sources.map(source => ({
+    id: source.id,
+    name: source.name,
+    url: source.url,
+    enabled: source.enabled,
+    autoPublish: source.auto_publish,
+    defaultCategory: source.default_category,
+    filters: source.filters,
+  }));
+
+  console.log(`[RSS Auto] Processing ${rssSources.length} sources with concurrency limit of ${CONCURRENCY_LIMIT}...`);
+
+  // Scrape sources in parallel with concurrency control
+  const scrapeResults = await processWithConcurrency(
+    rssSources,
+    CONCURRENCY_LIMIT,
+    async (rssSource) => {
+      const result = await scrapeRSSSource(rssSource);
+      return { source: rssSource.name, sourceId: rssSource.id, result };
+    }
+  );
+
+  // Build sourceResults and aggregate totals
   const sourceResults: Array<{ source: string; result: ScrapingResult }> = [];
   const totals: ScrapingResult = {
     articlesFound: 0,
@@ -440,21 +490,8 @@ export async function scrapeAllSources(): Promise<{
     durationMs: 0,
   };
 
-  for (const source of sources) {
-    const rssSource: RSSSource = {
-      id: source.id,
-      name: source.name,
-      url: source.url,
-      enabled: source.enabled,
-      autoPublish: source.auto_publish,
-      defaultCategory: source.default_category,
-      filters: source.filters,
-    };
-
-    const result = await scrapeRSSSource(rssSource);
-    sourceResults.push({ source: source.name, result });
-
-    // Aggregate totals
+  for (const { source, result } of scrapeResults) {
+    sourceResults.push({ source, result });
     totals.articlesFound += result.articlesFound;
     totals.articlesNew += result.articlesNew;
     totals.articlesPublished += result.articlesPublished;
@@ -465,20 +502,24 @@ export async function scrapeAllSources(): Promise<{
 
   totals.durationMs = Date.now() - startTime;
 
-  // Log scraping results
-  for (const { source, result } of sourceResults) {
-    const sourceData = sources.find(s => s.name === source);
-    await supabaseAdmin.from("scraping_logs").insert({
-      source_id: sourceData?.id,
-      source_name: source,
-      articles_found: result.articlesFound,
-      articles_new: result.articlesNew,
-      articles_published: result.articlesPublished,
-      articles_pending: result.articlesPending,
-      articles_skipped: result.articlesSkipped,
-      errors: result.errors.length > 0 ? result.errors : null,
-      duration_ms: result.durationMs,
-    });
+  // Batch insert scraping logs (instead of one-by-one)
+  const logs = scrapeResults.map(({ source, sourceId, result }) => ({
+    source_id: sourceId,
+    source_name: source,
+    articles_found: result.articlesFound,
+    articles_new: result.articlesNew,
+    articles_published: result.articlesPublished,
+    articles_pending: result.articlesPending,
+    articles_skipped: result.articlesSkipped,
+    errors: result.errors.length > 0 ? result.errors : null,
+    duration_ms: result.durationMs,
+  }));
+
+  if (logs.length > 0) {
+    const { error: logError } = await supabaseAdmin.from("scraping_logs").insert(logs);
+    if (logError) {
+      console.error("[RSS Auto] Error inserting scraping logs:", logError.message);
+    }
   }
 
   console.log(`[RSS Auto] Scraping completed: ${totals.articlesNew} new articles from ${sources.length} sources in ${totals.durationMs}ms`);

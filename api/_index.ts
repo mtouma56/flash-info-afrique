@@ -421,10 +421,13 @@ app.post("/api/scrape-rss", async (req, res) => {
       })),
     });
   } catch (error) {
-    logger.error("RSS scraping error", undefined, error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    logger.error("RSS scraping error", { errorMessage, errorStack }, error);
     return res.status(500).json({ 
       error: "RSS scraping failed",
-      message: error instanceof Error ? error.message : "Unknown error",
+      message: errorMessage,
+      timestamp: new Date().toISOString(),
     });
   }
 });
@@ -438,14 +441,25 @@ app.get("/api/scrape-rss", async (req, res) => {
 
   try {
     logger.info("Starting manual RSS scraping...");
+    const startTime = Date.now();
     const results = await rssAutoService.scrapeAllSources();
+    const duration = Date.now() - startTime;
 
     // Invalidate articles cache after scraping
     invalidateArticlesCache();
 
+    // Log completion with details
+    logger.info("Manual RSS scraping completed", {
+      duration,
+      sources: results.totalSources,
+      newArticles: results.results.articlesNew,
+      errors: results.results.errors.length,
+    });
+
     return res.json({
       success: true,
       message: "RSS scraping completed",
+      duration: `${duration}ms`,
       ...results.results,
       sourceResults: results.sourceResults.map(sr => ({
         source: sr.source,
@@ -453,11 +467,18 @@ app.get("/api/scrape-rss", async (req, res) => {
         new: sr.result.articlesNew,
         published: sr.result.articlesPublished,
         pending: sr.result.articlesPending,
+        errors: sr.result.errors.length,
+        durationMs: sr.result.durationMs,
       })),
     });
   } catch (error) {
-    logger.error("Manual RSS scraping error", undefined, error);
-    return res.status(500).json({ error: "RSS scraping failed" });
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    logger.error("Manual RSS scraping error", { errorMessage }, error);
+    return res.status(500).json({ 
+      error: "RSS scraping failed",
+      message: errorMessage,
+      timestamp: new Date().toISOString(),
+    });
   }
 });
 

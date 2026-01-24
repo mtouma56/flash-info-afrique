@@ -1239,7 +1239,8 @@ var rssService_default = {
 init_supabase();
 import Parser2 from "rss-parser";
 var parser2 = new Parser2({
-  timeout: 2e4,
+  timeout: 15e3,
+  // Reduced from 20s to 15s to prevent slow feeds from blocking
   headers: {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/rss+xml, application/xml, text/xml, */*"
@@ -1252,6 +1253,21 @@ var parser2 = new Parser2({
     ]
   }
 });
+var CONCURRENCY_LIMIT = 3;
+async function processWithConcurrency(items, limit, fn) {
+  const results = [];
+  for (let i = 0; i < items.length; i += limit) {
+    const batch = items.slice(i, i + limit);
+    const batchResults = await Promise.all(
+      batch.map((item) => fn(item).catch((error) => {
+        console.error("[RSS Auto] Error in concurrent processing:", error.message);
+        return null;
+      }))
+    );
+    results.push(...batchResults.filter((r) => r !== null));
+  }
+  return results;
+}
 var FIDELIS_KEYWORDS = [
   { term: "fidelis", score: 50 },
   { term: "secret bancaire", score: 30 },
@@ -1339,7 +1355,7 @@ function extractTags2(title, content) {
   if (text.includes("investissement")) tags.push("Investissement");
   if (text.includes("bourse") || text.includes("march\xE9 financier")) tags.push("March\xE9s");
   if (text.includes("r\xE9gulation") || text.includes("r\xE9glementation")) tags.push("R\xE9gulation");
-  return [...new Set(tags)];
+  return Array.from(new Set(tags));
 }
 function generateSlug2(title) {
   const baseSlug = title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").substring(0, 80);
@@ -1492,6 +1508,24 @@ async function scrapeAllSources() {
       sourceResults: []
     };
   }
+  const rssSources = sources.map((source) => ({
+    id: source.id,
+    name: source.name,
+    url: source.url,
+    enabled: source.enabled,
+    autoPublish: source.auto_publish,
+    defaultCategory: source.default_category,
+    filters: source.filters
+  }));
+  console.log(`[RSS Auto] Processing ${rssSources.length} sources with concurrency limit of ${CONCURRENCY_LIMIT}...`);
+  const scrapeResults = await processWithConcurrency(
+    rssSources,
+    CONCURRENCY_LIMIT,
+    async (rssSource) => {
+      const result = await scrapeRSSSource(rssSource);
+      return { source: rssSource.name, sourceId: rssSource.id, result };
+    }
+  );
   const sourceResults = [];
   const totals = {
     articlesFound: 0,
@@ -1502,18 +1536,8 @@ async function scrapeAllSources() {
     errors: [],
     durationMs: 0
   };
-  for (const source of sources) {
-    const rssSource = {
-      id: source.id,
-      name: source.name,
-      url: source.url,
-      enabled: source.enabled,
-      autoPublish: source.auto_publish,
-      defaultCategory: source.default_category,
-      filters: source.filters
-    };
-    const result = await scrapeRSSSource(rssSource);
-    sourceResults.push({ source: source.name, result });
+  for (const { source, result } of scrapeResults) {
+    sourceResults.push({ source, result });
     totals.articlesFound += result.articlesFound;
     totals.articlesNew += result.articlesNew;
     totals.articlesPublished += result.articlesPublished;
@@ -1522,19 +1546,22 @@ async function scrapeAllSources() {
     totals.errors.push(...result.errors);
   }
   totals.durationMs = Date.now() - startTime;
-  for (const { source, result } of sourceResults) {
-    const sourceData = sources.find((s) => s.name === source);
-    await supabaseAdmin.from("scraping_logs").insert({
-      source_id: sourceData?.id,
-      source_name: source,
-      articles_found: result.articlesFound,
-      articles_new: result.articlesNew,
-      articles_published: result.articlesPublished,
-      articles_pending: result.articlesPending,
-      articles_skipped: result.articlesSkipped,
-      errors: result.errors.length > 0 ? result.errors : null,
-      duration_ms: result.durationMs
-    });
+  const logs = scrapeResults.map(({ source, sourceId, result }) => ({
+    source_id: sourceId,
+    source_name: source,
+    articles_found: result.articlesFound,
+    articles_new: result.articlesNew,
+    articles_published: result.articlesPublished,
+    articles_pending: result.articlesPending,
+    articles_skipped: result.articlesSkipped,
+    errors: result.errors.length > 0 ? result.errors : null,
+    duration_ms: result.durationMs
+  }));
+  if (logs.length > 0) {
+    const { error: logError } = await supabaseAdmin.from("scraping_logs").insert(logs);
+    if (logError) {
+      console.error("[RSS Auto] Error inserting scraping logs:", logError.message);
+    }
   }
   console.log(`[RSS Auto] Scraping completed: ${totals.articlesNew} new articles from ${sources.length} sources in ${totals.durationMs}ms`);
   return {
@@ -1858,10 +1885,13 @@ app.post("/api/scrape-rss", async (req, res) => {
       }))
     });
   } catch (error) {
-    logger_default.error("RSS scraping error", void 0, error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorStack = error instanceof Error ? error.stack : void 0;
+    logger_default.error("RSS scraping error", { errorMessage, errorStack }, error);
     return res.status(500).json({
       error: "RSS scraping failed",
-      message: error instanceof Error ? error.message : "Unknown error"
+      message: errorMessage,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
     });
   }
 });
@@ -1872,23 +1902,39 @@ app.get("/api/scrape-rss", async (req, res) => {
   }
   try {
     logger_default.info("Starting manual RSS scraping...");
+    const startTime = Date.now();
     const results = await rssAutoService_default.scrapeAllSources();
+    const duration = Date.now() - startTime;
     invalidateArticlesCache();
+    logger_default.info("Manual RSS scraping completed", {
+      duration,
+      sources: results.totalSources,
+      newArticles: results.results.articlesNew,
+      errors: results.results.errors.length
+    });
     return res.json({
       success: true,
       message: "RSS scraping completed",
+      duration: `${duration}ms`,
       ...results.results,
       sourceResults: results.sourceResults.map((sr) => ({
         source: sr.source,
         found: sr.result.articlesFound,
         new: sr.result.articlesNew,
         published: sr.result.articlesPublished,
-        pending: sr.result.articlesPending
+        pending: sr.result.articlesPending,
+        errors: sr.result.errors.length,
+        durationMs: sr.result.durationMs
       }))
     });
   } catch (error) {
-    logger_default.error("Manual RSS scraping error", void 0, error);
-    return res.status(500).json({ error: "RSS scraping failed" });
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    logger_default.error("Manual RSS scraping error", { errorMessage }, error);
+    return res.status(500).json({
+      error: "RSS scraping failed",
+      message: errorMessage,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    });
   }
 });
 app.post("/api/admin/login", async (req, res) => {
