@@ -167,31 +167,57 @@ export default function ArticleEdit() {
     );
   };
 
-  const updateDossierArticleIds = async (articleId: string) => {
+  const updateDossierArticleIds = async (articleId: string): Promise<boolean> => {
+    // Validate article ID
+    if (!articleId) {
+      console.error("Article ID is missing for dossier update");
+      toast.error("Erreur : ID de l'article manquant");
+      return false;
+    }
+
     // Update each dossier to add/remove this article from their articleIds
-    for (const dossier of dossiers) {
+    const updatePromises = dossiers.map(async (dossier) => {
       const shouldInclude = selectedDossierIds.includes(dossier.id);
       const currentlyIncludes = dossier.articleIds.includes(articleId);
 
       if (shouldInclude && !currentlyIncludes) {
         // Add article to dossier
-        await authFetch(`/api/admin/dossiers/${dossier.id}`, {
+        const response = await authFetch(`/api/admin/dossiers/${dossier.id}`, {
           method: "PUT",
           body: JSON.stringify({
             ...dossier,
             articleIds: [...dossier.articleIds, articleId],
           }),
         });
+        if (!response.ok) {
+          console.error(`Failed to add article to dossier ${dossier.title}`);
+          throw new Error(`Erreur lors de l'ajout au dossier "${dossier.title}"`);
+        }
       } else if (!shouldInclude && currentlyIncludes) {
         // Remove article from dossier
-        await authFetch(`/api/admin/dossiers/${dossier.id}`, {
+        const response = await authFetch(`/api/admin/dossiers/${dossier.id}`, {
           method: "PUT",
           body: JSON.stringify({
             ...dossier,
             articleIds: dossier.articleIds.filter((id) => id !== articleId),
           }),
         });
+        if (!response.ok) {
+          console.error(`Failed to remove article from dossier ${dossier.title}`);
+          throw new Error(`Erreur lors du retrait du dossier "${dossier.title}"`);
+        }
       }
+    });
+
+    try {
+      await Promise.all(updatePromises);
+      // Dispatch event to notify other components that dossiers have been updated
+      window.dispatchEvent(new CustomEvent('dossiers-updated'));
+      return true;
+    } catch (error) {
+      console.error("Error updating dossier associations:", error);
+      toast.error("Erreur lors de la mise à jour des associations de dossiers");
+      return false;
     }
   };
 
@@ -240,9 +266,24 @@ export default function ArticleEdit() {
 
       if (response.ok) {
         const savedArticle = await response.json();
+        const articleId = savedArticle.id;
+        
+        if (!articleId) {
+          console.error("Article ID not returned from server");
+          toast.error("Erreur : ID de l'article non retourné par le serveur");
+          return;
+        }
+        
         // Update dossier associations
-        await updateDossierArticleIds(savedArticle.id || params?.id);
-        toast.success(isNew ? "Article créé" : "Article mis à jour");
+        const dossierUpdateSuccess = await updateDossierArticleIds(articleId);
+        
+        if (!dossierUpdateSuccess && selectedDossierIds.length > 0) {
+          // Dossier update failed but article was saved - show warning
+          toast.warning("Article enregistré, mais erreur lors de la mise à jour des dossiers");
+        } else {
+          toast.success(isNew ? "Article créé" : "Article mis à jour");
+        }
+        
         setLocation("/admin/articles");
       } else {
         const error = await response.json();

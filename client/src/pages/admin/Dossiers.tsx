@@ -32,7 +32,7 @@ import {
   Calendar,
   FolderOpen,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import type { Dossier } from "@shared/types/admin";
@@ -44,11 +44,7 @@ export default function AdminDossiers() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [dossierToDelete, setDossierToDelete] = useState<Dossier | null>(null);
 
-  useEffect(() => {
-    fetchDossiers();
-  }, []);
-
-  const fetchDossiers = async () => {
+  const fetchDossiers = useCallback(async () => {
     try {
       const response = await authFetch("/api/admin/dossiers");
       if (response.ok) {
@@ -61,7 +57,25 @@ export default function AdminDossiers() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [authFetch]);
+
+  // Initial fetch on mount
+  useEffect(() => {
+    fetchDossiers();
+  }, [fetchDossiers]);
+
+  // Listen for dossier updates from other components (e.g., ArticleEdit)
+  useEffect(() => {
+    const handleDossiersUpdated = () => {
+      fetchDossiers();
+    };
+
+    window.addEventListener("dossiers-updated", handleDossiersUpdated);
+
+    return () => {
+      window.removeEventListener("dossiers-updated", handleDossiersUpdated);
+    };
+  }, [fetchDossiers]);
 
   const handleToggleActive = async (dossier: Dossier) => {
     try {
