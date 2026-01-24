@@ -6,9 +6,22 @@
   "outputDirectory": "dist/public",
   "functions": {
     "api/index.js": {
-      "maxDuration": 30
+      "maxDuration": 60
     }
   },
+  "crons": [
+    {
+      "path": "/api/scrape-rss",
+      "schedule": "0 */2 * * *"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/dossier-fidelis",
+      "destination": "/dossier/fidelis",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",
@@ -33,7 +46,7 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=30, stale-while-revalidate=60"
+          "value": "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
         }
       ]
     },
@@ -42,7 +55,7 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=60, stale-while-revalidate=120"
+          "value": "public, max-age=120, s-maxage=600, stale-while-revalidate=1200"
         }
       ]
     },
@@ -51,7 +64,7 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=60, stale-while-revalidate=120"
+          "value": "public, max-age=120, s-maxage=600, stale-while-revalidate=1200"
         }
       ]
     },
@@ -75,6 +88,15 @@
     },
     {
       "source": "/api/health",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    },
+    {
+      "source": "/api/scrape-rss",
       "headers": [
         {
           "key": "Cache-Control",

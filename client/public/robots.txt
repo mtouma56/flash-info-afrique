@@ -8,10 +8,17 @@ Allow: /
 Sitemap: https://flashinfoafrique.com/sitemap.xml
 Sitemap: https://flashinfoafrique.com/news-sitemap.xml
 
-# Disallow admin and API routes
-Disallow: /api/
+# Disallow admin and internal API routes
+Disallow: /api/admin/
+Disallow: /api/scrape-rss
+Disallow: /api/newsletter/
 Disallow: /admin/
 Disallow: /__manus__/
+
+# Allow public API endpoints for indexing
+Allow: /api/articles
+Allow: /api/categories
+Allow: /api/dossiers
 
 # Allow all crawlers to access the main content
 User-agent: Googlebot

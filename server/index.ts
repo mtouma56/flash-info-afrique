@@ -16,9 +16,13 @@ import {
 } from "./middleware/auth";
 import storage from "./data/supabaseStorage";
 import rssService from "./services/rssService";
+import rssAutoService from "./services/rssAutoService";
 import { supabaseAdmin } from "./lib/supabase";
 import logger from "./lib/logger";
 import requestLogger from "./middleware/requestLogger";
+
+// Cron secret for automated scraping
+const CRON_SECRET = process.env.CRON_SECRET || "default-cron-secret-change-me";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -199,13 +203,50 @@ async function startServer() {
     }
   });
 
-  // Public articles endpoint - returns only published articles
+  // ============ IN-MEMORY CACHE FOR DEVELOPMENT ============
+  interface CacheEntry<T> {
+    data: T;
+    timestamp: number;
+  }
+  
+  const CACHE_TTL_ARTICLES_MS = 5 * 60 * 1000; // 5 minutes
+  const CACHE_TTL_CATEGORIES_MS = 10 * 60 * 1000; // 10 minutes
+  
+  const articlesCache: { entry: CacheEntry<unknown[]> | null } = { entry: null };
+  const categoriesCache: { entry: CacheEntry<unknown[]> | null } = { entry: null };
+  
+  function isCacheValid<T>(cache: CacheEntry<T> | null, ttl: number): boolean {
+    if (!cache) return false;
+    return Date.now() - cache.timestamp < ttl;
+  }
+
+  // Public articles endpoint - returns only published articles with caching
   app.get("/api/articles", async (_req, res) => {
+    const startTime = Date.now();
     try {
-      const allArticles = await storage.getArticles();
-      const publishedArticles = allArticles.filter((a) => a.status === "published");
-      // Sort by publishedAt date descending (newest first)
-      publishedArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+      // Check cache first
+      if (isCacheValid(articlesCache.entry, CACHE_TTL_ARTICLES_MS)) {
+        const duration = Date.now() - startTime;
+        logger.info("Articles served from cache", { duration, count: (articlesCache.entry!.data as unknown[]).length });
+        res.setHeader("X-Cache", "HIT");
+        res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
+        return res.json(articlesCache.entry!.data);
+      }
+
+      // Use optimized query directly
+      const publishedArticles = await storage.getPublishedArticles();
+      
+      // Update cache
+      articlesCache.entry = {
+        data: publishedArticles,
+        timestamp: Date.now(),
+      };
+
+      const duration = Date.now() - startTime;
+      logger.info("Articles fetched from database", { duration, count: publishedArticles.length });
+      
+      res.setHeader("X-Cache", "MISS");
+      res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
       return res.json(publishedArticles);
     } catch (error) {
       logger.error("Public articles list error", undefined, error);
@@ -238,10 +279,32 @@ async function startServer() {
     }
   });
 
-  // Public categories endpoint
+  // Public categories endpoint with caching
   app.get("/api/categories", async (_req, res) => {
+    const startTime = Date.now();
     try {
+      // Check cache first
+      if (isCacheValid(categoriesCache.entry, CACHE_TTL_CATEGORIES_MS)) {
+        const duration = Date.now() - startTime;
+        logger.info("Categories served from cache", { duration, count: (categoriesCache.entry!.data as unknown[]).length });
+        res.setHeader("X-Cache", "HIT");
+        res.setHeader("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=1200");
+        return res.json(categoriesCache.entry!.data);
+      }
+
       const categories = await storage.getCategories();
+      
+      // Update cache
+      categoriesCache.entry = {
+        data: categories,
+        timestamp: Date.now(),
+      };
+
+      const duration = Date.now() - startTime;
+      logger.info("Categories fetched from database", { duration, count: categories.length });
+      
+      res.setHeader("X-Cache", "MISS");
+      res.setHeader("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=1200");
       return res.json(categories);
     } catch (error) {
       logger.error("Public categories list error", undefined, error);
@@ -283,6 +346,91 @@ async function startServer() {
     } catch (error) {
       logger.error("Public dossier get error", { slug: req.params.slug }, error);
       return res.status(500).json({ error: "Erreur lors de la récupération du dossier" });
+    }
+  });
+
+  // ============ AUTOMATIC RSS SCRAPING ============
+
+  // Endpoint for automatic RSS scraping (called by cron job)
+  app.post("/api/scrape-rss", async (req, res) => {
+    try {
+      // Verify authorization
+      const authHeader = req.headers.authorization;
+      if (authHeader !== `Bearer ${CRON_SECRET}`) {
+        logger.warn("Unauthorized scrape-rss attempt");
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      logger.info("Starting automatic RSS scraping...");
+      const startTime = Date.now();
+
+      const results = await rssAutoService.scrapeAllSources();
+
+      const duration = Date.now() - startTime;
+      logger.info("RSS scraping completed", {
+        duration,
+        sources: results.totalSources,
+        newArticles: results.results.articlesNew,
+        published: results.results.articlesPublished,
+        pending: results.results.articlesPending,
+      });
+
+      // Invalidate articles cache after scraping
+      articlesCache.entry = null;
+
+      return res.json({
+        success: true,
+        message: "RSS scraping completed",
+        duration: `${duration}ms`,
+        ...results.results,
+        sourceResults: results.sourceResults.map(sr => ({
+          source: sr.source,
+          found: sr.result.articlesFound,
+          new: sr.result.articlesNew,
+          published: sr.result.articlesPublished,
+          pending: sr.result.articlesPending,
+          errors: sr.result.errors.length,
+        })),
+      });
+    } catch (error) {
+      logger.error("RSS scraping error", undefined, error);
+      return res.status(500).json({ 
+        error: "RSS scraping failed",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // GET version for manual testing (with secret in query param)
+  app.get("/api/scrape-rss", async (req, res) => {
+    const secret = req.query.secret as string;
+    if (secret !== CRON_SECRET) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // Forward to POST handler logic
+    try {
+      logger.info("Starting manual RSS scraping...");
+      const results = await rssAutoService.scrapeAllSources();
+
+      // Invalidate articles cache after scraping
+      articlesCache.entry = null;
+
+      return res.json({
+        success: true,
+        message: "RSS scraping completed",
+        ...results.results,
+        sourceResults: results.sourceResults.map(sr => ({
+          source: sr.source,
+          found: sr.result.articlesFound,
+          new: sr.result.articlesNew,
+          published: sr.result.articlesPublished,
+          pending: sr.result.articlesPending,
+        })),
+      });
+    } catch (error) {
+      logger.error("Manual RSS scraping error", undefined, error);
+      return res.status(500).json({ error: "RSS scraping failed" });
     }
   });
 

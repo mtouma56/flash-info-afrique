@@ -169,9 +169,16 @@ export default function SEO({
   return (
     <Helmet>
       {/* Basic Meta Tags */}
+      <html lang="fr" />
       <title>{fullTitle}</title>
       <meta name="description" content={description} />
       <meta name="keywords" content={keywords} />
+      <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+      <meta name="googlebot" content="index, follow" />
+      <meta name="author" content={author || "Flash Info Afrique"} />
+      <meta name="publisher" content="Flash Info Afrique" />
+      <meta name="language" content="fr" />
+      <meta name="content-language" content="fr-FR" />
       <link rel="canonical" href={url} />
 
       {/* Geographic Meta Tags */}

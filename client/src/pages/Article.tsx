@@ -1,5 +1,6 @@
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import OptimizedImage from "@/components/OptimizedImage";
 import SEO, { calculateReadingTime, extractGeoKeywords, generateEnhancedKeywords } from "@/components/SEO";
 import StructuredData from "@/components/StructuredData";
 import { Badge } from "@/components/ui/badge";
@@ -293,11 +294,13 @@ export default function Article() {
 
             {/* Featured Image */}
             <div className="relative h-[250px] sm:h-[350px] md:h-[400px] rounded-xl overflow-hidden mb-6 sm:mb-8">
-              <img
+              <OptimizedImage
                 src={article.imageUrl}
                 alt={`Image illustrant l'article: ${article.title}`}
-                className="w-full h-full object-cover"
-                loading="lazy"
+                className="w-full h-full"
+                aspectRatio="16/9"
+                priority={true}
+                sizes="(max-width: 768px) 100vw, 896px"
               />
             </div>
 
@@ -407,11 +410,13 @@ export default function Article() {
                     className="overflow-hidden hover:shadow-lg transition-shadow"
                   >
                     <div className="relative h-40 overflow-hidden">
-                      <img
+                      <OptimizedImage
                         src={relatedArticle.imageUrl}
                         alt={`Image illustrant: ${relatedArticle.title}`}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
+                        className="w-full h-full"
+                        aspectRatio="16/9"
+                        priority={false}
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                       />
                     </div>
                     <CardContent className="p-4">

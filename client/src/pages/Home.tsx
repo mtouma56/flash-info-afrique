@@ -59,8 +59,13 @@ export default function Home() {
   };
 
   // Articles FIDELIS pour l'encart spécial
+  // Check for both "FIDELIS" and "FIDELIS Finance" tags for compatibility
   const fidelisArticles = articles.filter((a) =>
-    a.tags.includes("FIDELIS Finance")
+    a.tags.some(tag => 
+      tag === "FIDELIS" || 
+      tag === "FIDELIS Finance" || 
+      tag.toLowerCase().includes("fidelis")
+    )
   );
 
   const handleNewsletterSubmit = async (e: React.FormEvent) => {

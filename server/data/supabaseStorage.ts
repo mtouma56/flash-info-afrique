@@ -36,14 +36,19 @@ export async function getArticles(): Promise<Article[]> {
 }
 
 // Optimized function for public endpoint - filters at DB level and uses limited fields
-export async function getPublishedArticles(): Promise<Article[]> {
+export async function getPublishedArticles(limit?: number): Promise<Article[]> {
+  let query = supabaseAdmin
+    .from("articles")
+    .select("*")
+    .eq("status", "published")
+    .order("published_at", { ascending: false });
+
+  if (limit) {
+    query = query.limit(limit);
+  }
+
   const result = await withRetry(
-    async () =>
-      await supabaseAdmin
-        .from("articles")
-        .select("*")
-        .eq("status", "published")
-        .order("published_at", { ascending: false }),
+    async () => await query,
     {
       maxRetries: 2,
       onRetry: (attempt, error) => {
@@ -54,6 +59,103 @@ export async function getPublishedArticles(): Promise<Article[]> {
 
   if (result.error) {
     console.error("Error fetching published articles after retries:", result.error);
+    return [];
+  }
+
+  return ((result.data as Record<string, unknown>[]) || []).map(mapArticleFromDb);
+}
+
+// Optimized function for featured articles - uses partial index
+export async function getFeaturedArticles(limit = 10): Promise<Article[]> {
+  const result = await withRetry(
+    async () =>
+      await supabaseAdmin
+        .from("articles")
+        .select("*")
+        .eq("status", "published")
+        .eq("is_featured", true)
+        .order("published_at", { ascending: false })
+        .limit(limit),
+    {
+      maxRetries: 2,
+      onRetry: (attempt, error) => {
+        console.warn(`Retrying getFeaturedArticles (attempt ${attempt}):`, error);
+      },
+    }
+  );
+
+  if (result.error) {
+    console.error("Error fetching featured articles after retries:", result.error);
+    return [];
+  }
+
+  return ((result.data as Record<string, unknown>[]) || []).map(mapArticleFromDb);
+}
+
+// Optimized function for FIDELIS articles - uses GIN index on tags
+export async function getFidelisArticles(limit = 20): Promise<Article[]> {
+  const result = await withRetry(
+    async () =>
+      await supabaseAdmin
+        .from("articles")
+        .select("*")
+        .eq("status", "published")
+        .contains("tags", ["FIDELIS"])
+        .order("published_at", { ascending: false })
+        .limit(limit),
+    {
+      maxRetries: 2,
+      onRetry: (attempt, error) => {
+        console.warn(`Retrying getFidelisArticles (attempt ${attempt}):`, error);
+      },
+    }
+  );
+
+  if (result.error) {
+    console.error("Error fetching FIDELIS articles after retries:", result.error);
+    return [];
+  }
+
+  return ((result.data as Record<string, unknown>[]) || []).map(mapArticleFromDb);
+}
+
+// Count FIDELIS articles for stats
+export async function getFidelisCount(): Promise<number> {
+  const { count, error } = await supabaseAdmin
+    .from("articles")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "published")
+    .contains("tags", ["FIDELIS"]);
+
+  if (error) {
+    console.error("Error counting FIDELIS articles:", error);
+    return 0;
+  }
+
+  return count || 0;
+}
+
+// Get articles by category for performance
+export async function getArticlesByCategory(categorySlug: string, limit = 20): Promise<Article[]> {
+  const result = await withRetry(
+    async () =>
+      await supabaseAdmin
+        .from("articles")
+        .select("*")
+        .eq("status", "published")
+        .eq("category", categorySlug)
+        .order("published_at", { ascending: false })
+        .limit(limit),
+    {
+      maxRetries: 2,
+      onRetry: (attempt, error) => {
+        console.warn(`Retrying getArticlesByCategory (attempt ${attempt}):`, error);
+      },
+    }
+  );
+
+  if (result.error) {
+    console.error("Error fetching articles by category after retries:", result.error);
     return [];
   }
 
@@ -1087,6 +1189,10 @@ export default {
   // Articles
   getArticles,
   getPublishedArticles,
+  getFeaturedArticles,
+  getFidelisArticles,
+  getFidelisCount,
+  getArticlesByCategory,
   getArticle,
   getArticleBySlug,
   createArticle,

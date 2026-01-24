@@ -15,8 +15,12 @@ import {
 } from "../server/middleware/auth";
 import storage from "../server/data/supabaseStorage";
 import rssService from "../server/services/rssService";
+import rssAutoService from "../server/services/rssAutoService";
 import { supabaseAdmin } from "../server/lib/supabase";
 import logger from "../server/lib/logger";
+
+// Cron secret for automated scraping
+const CRON_SECRET = process.env.CRON_SECRET || "default-cron-secret-change-me";
 
 // Email validation helper
 function isValidEmail(email: string): boolean {
@@ -57,23 +61,35 @@ function mapCategoryToSlug(category: string | undefined): string {
   return categoryMap[normalized] || 'analyses-decryptages';
 }
 
-// ============ SIMPLE IN-MEMORY CACHE ============
+// ============ OPTIMIZED IN-MEMORY CACHE ============
 interface CacheEntry<T> {
   data: T;
   timestamp: number;
 }
 
-const CACHE_TTL_MS = 60 * 1000; // 1 minute cache TTL
+// Cache TTLs optimized for performance
+const CACHE_TTL_ARTICLES_MS = 5 * 60 * 1000; // 5 minutes for articles (frequently updated)
+const CACHE_TTL_CATEGORIES_MS = 10 * 60 * 1000; // 10 minutes for categories (rarely changed)
+const CACHE_TTL_FEATURED_MS = 5 * 60 * 1000; // 5 minutes for featured articles
+const CACHE_TTL_FIDELIS_MS = 5 * 60 * 1000; // 5 minutes for FIDELIS articles
+
+// Caches for different data types
 const articlesCache: { entry: CacheEntry<unknown[]> | null } = { entry: null };
 const categoriesCache: { entry: CacheEntry<unknown[]> | null } = { entry: null };
+const featuredCache: { entry: CacheEntry<unknown[]> | null } = { entry: null };
+const fidelisCache: { entry: CacheEntry<unknown[]> | null } = { entry: null };
+const fidelisCountCache: { entry: CacheEntry<number> | null } = { entry: null };
 
-function isCacheValid<T>(cache: CacheEntry<T> | null): boolean {
+function isCacheValid<T>(cache: CacheEntry<T> | null, ttl: number): boolean {
   if (!cache) return false;
-  return Date.now() - cache.timestamp < CACHE_TTL_MS;
+  return Date.now() - cache.timestamp < ttl;
 }
 
 function invalidateArticlesCache(): void {
   articlesCache.entry = null;
+  featuredCache.entry = null;
+  fidelisCache.entry = null;
+  fidelisCountCache.entry = null;
 }
 
 function invalidateCategoriesCache(): void {
@@ -241,11 +257,11 @@ app.get("/api/articles", async (_req, res) => {
   const startTime = Date.now();
   try {
     // Check cache first
-    if (isCacheValid(articlesCache.entry)) {
+    if (isCacheValid(articlesCache.entry, CACHE_TTL_ARTICLES_MS)) {
       const duration = Date.now() - startTime;
       logger.info("Articles served from cache", { duration, count: (articlesCache.entry!.data as unknown[]).length });
       res.setHeader("X-Cache", "HIT");
-      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+      res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
       return res.json(articlesCache.entry!.data);
     }
 
@@ -262,7 +278,7 @@ app.get("/api/articles", async (_req, res) => {
     logger.info("Articles fetched from database", { duration, count: publishedArticles.length });
     
     res.setHeader("X-Cache", "MISS");
-    res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
     return res.json(publishedArticles);
   } catch (error) {
     const duration = Date.now() - startTime;
@@ -298,11 +314,11 @@ app.get("/api/categories", async (_req, res) => {
   const startTime = Date.now();
   try {
     // Check cache first
-    if (isCacheValid(categoriesCache.entry)) {
+    if (isCacheValid(categoriesCache.entry, CACHE_TTL_CATEGORIES_MS)) {
       const duration = Date.now() - startTime;
       logger.info("Categories served from cache", { duration, count: (categoriesCache.entry!.data as unknown[]).length });
       res.setHeader("X-Cache", "HIT");
-      res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+      res.setHeader("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=1200");
       return res.json(categoriesCache.entry!.data);
     }
 
@@ -318,7 +334,7 @@ app.get("/api/categories", async (_req, res) => {
     logger.info("Categories fetched from database", { duration, count: categories.length });
     
     res.setHeader("X-Cache", "MISS");
-    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+    res.setHeader("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=1200");
     return res.json(categories);
   } catch (error) {
     const duration = Date.now() - startTime;
@@ -358,6 +374,90 @@ app.get("/api/dossiers/:slug", async (req, res) => {
   } catch (error) {
     logger.error("Public dossier get error", { slug: req.params.slug }, error);
     return res.status(500).json({ error: "Erreur lors de la récupération du dossier" });
+  }
+});
+
+// ============ AUTOMATIC RSS SCRAPING ============
+
+// Endpoint for automatic RSS scraping (called by cron job)
+app.post("/api/scrape-rss", async (req, res) => {
+  try {
+    // Verify authorization
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${CRON_SECRET}`) {
+      logger.warn("Unauthorized scrape-rss attempt");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    logger.info("Starting automatic RSS scraping...");
+    const startTime = Date.now();
+
+    const results = await rssAutoService.scrapeAllSources();
+
+    const duration = Date.now() - startTime;
+    logger.info("RSS scraping completed", {
+      duration,
+      sources: results.totalSources,
+      newArticles: results.results.articlesNew,
+      published: results.results.articlesPublished,
+      pending: results.results.articlesPending,
+    });
+
+    // Invalidate articles cache after scraping
+    invalidateArticlesCache();
+
+    return res.json({
+      success: true,
+      message: "RSS scraping completed",
+      duration: `${duration}ms`,
+      ...results.results,
+      sourceResults: results.sourceResults.map(sr => ({
+        source: sr.source,
+        found: sr.result.articlesFound,
+        new: sr.result.articlesNew,
+        published: sr.result.articlesPublished,
+        pending: sr.result.articlesPending,
+        errors: sr.result.errors.length,
+      })),
+    });
+  } catch (error) {
+    logger.error("RSS scraping error", undefined, error);
+    return res.status(500).json({ 
+      error: "RSS scraping failed",
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+// GET version for manual testing (with secret in query param)
+app.get("/api/scrape-rss", async (req, res) => {
+  const secret = req.query.secret as string;
+  if (secret !== CRON_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    logger.info("Starting manual RSS scraping...");
+    const results = await rssAutoService.scrapeAllSources();
+
+    // Invalidate articles cache after scraping
+    invalidateArticlesCache();
+
+    return res.json({
+      success: true,
+      message: "RSS scraping completed",
+      ...results.results,
+      sourceResults: results.sourceResults.map(sr => ({
+        source: sr.source,
+        found: sr.result.articlesFound,
+        new: sr.result.articlesNew,
+        published: sr.result.articlesPublished,
+        pending: sr.result.articlesPending,
+      })),
+    });
+  } catch (error) {
+    logger.error("Manual RSS scraping error", undefined, error);
+    return res.status(500).json({ error: "RSS scraping failed" });
   }
 });
 

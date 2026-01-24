@@ -112,9 +112,13 @@ async function getArticles() {
   }
   return (result.data || []).map(mapArticleFromDb);
 }
-async function getPublishedArticles() {
+async function getPublishedArticles(limit) {
+  let query = supabaseAdmin.from("articles").select("*").eq("status", "published").order("published_at", { ascending: false });
+  if (limit) {
+    query = query.limit(limit);
+  }
   const result = await withRetry(
-    async () => await supabaseAdmin.from("articles").select("*").eq("status", "published").order("published_at", { ascending: false }),
+    async () => await query,
     {
       maxRetries: 2,
       onRetry: (attempt, error) => {
@@ -124,6 +128,62 @@ async function getPublishedArticles() {
   );
   if (result.error) {
     console.error("Error fetching published articles after retries:", result.error);
+    return [];
+  }
+  return (result.data || []).map(mapArticleFromDb);
+}
+async function getFeaturedArticles(limit = 10) {
+  const result = await withRetry(
+    async () => await supabaseAdmin.from("articles").select("*").eq("status", "published").eq("is_featured", true).order("published_at", { ascending: false }).limit(limit),
+    {
+      maxRetries: 2,
+      onRetry: (attempt, error) => {
+        console.warn(`Retrying getFeaturedArticles (attempt ${attempt}):`, error);
+      }
+    }
+  );
+  if (result.error) {
+    console.error("Error fetching featured articles after retries:", result.error);
+    return [];
+  }
+  return (result.data || []).map(mapArticleFromDb);
+}
+async function getFidelisArticles(limit = 20) {
+  const result = await withRetry(
+    async () => await supabaseAdmin.from("articles").select("*").eq("status", "published").contains("tags", ["FIDELIS"]).order("published_at", { ascending: false }).limit(limit),
+    {
+      maxRetries: 2,
+      onRetry: (attempt, error) => {
+        console.warn(`Retrying getFidelisArticles (attempt ${attempt}):`, error);
+      }
+    }
+  );
+  if (result.error) {
+    console.error("Error fetching FIDELIS articles after retries:", result.error);
+    return [];
+  }
+  return (result.data || []).map(mapArticleFromDb);
+}
+async function getFidelisCount() {
+  const { count, error } = await supabaseAdmin.from("articles").select("*", { count: "exact", head: true }).eq("status", "published").contains("tags", ["FIDELIS"]);
+  if (error) {
+    console.error("Error counting FIDELIS articles:", error);
+    return 0;
+  }
+  return count || 0;
+}
+async function getArticlesByCategory(categorySlug, limit = 20) {
+  const result = await withRetry(
+    async () => await supabaseAdmin.from("articles").select("*").eq("status", "published").eq("category", categorySlug).order("published_at", { ascending: false }).limit(limit),
+    {
+      maxRetries: 2,
+      onRetry: (attempt, error) => {
+        console.warn(`Retrying getArticlesByCategory (attempt ${attempt}):`, error);
+      }
+    }
+  );
+  if (result.error) {
+    console.error("Error fetching articles by category after retries:", result.error);
     return [];
   }
   return (result.data || []).map(mapArticleFromDb);
@@ -760,6 +820,10 @@ var supabaseStorage_default = {
   // Articles
   getArticles,
   getPublishedArticles,
+  getFeaturedArticles,
+  getFidelisArticles,
+  getFidelisCount,
+  getArticlesByCategory,
   getArticle,
   getArticleBySlug,
   createArticle,
@@ -1171,8 +1235,325 @@ var rssService_default = {
   fetchRSSFeed
 };
 
+// server/services/rssAutoService.ts
+init_supabase();
+import Parser2 from "rss-parser";
+var parser2 = new Parser2({
+  timeout: 2e4,
+  headers: {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/rss+xml, application/xml, text/xml, */*"
+  },
+  customFields: {
+    item: [
+      ["media:content", "mediaContent"],
+      ["content:encoded", "contentEncoded"],
+      ["dc:creator", "creator"]
+    ]
+  }
+});
+var FIDELIS_KEYWORDS = [
+  { term: "fidelis", score: 50 },
+  { term: "secret bancaire", score: 30 },
+  { term: "commission bancaire", score: 25 },
+  { term: "sogetra", score: 25 },
+  { term: "bloomfield", score: 20 },
+  { term: "lev\xE9e secret", score: 30 }
+];
+var UEMOA_KEYWORDS = [
+  { term: "uemoa", score: 30 },
+  { term: "umoa", score: 30 },
+  { term: "brvm", score: 25 },
+  { term: "bceao", score: 25 },
+  { term: "fcfa", score: 15 },
+  { term: "franc cfa", score: 15 }
+];
+var FINANCE_KEYWORDS = [
+  { term: "banque", score: 15 },
+  { term: "finance", score: 15 },
+  { term: "investissement", score: 12 },
+  { term: "cr\xE9dit", score: 10 },
+  { term: "emprunt", score: 10 },
+  { term: "obligation", score: 10 },
+  { term: "action", score: 8 },
+  { term: "dividende", score: 10 },
+  { term: "bourse", score: 15 },
+  { term: "march\xE9 financier", score: 15 },
+  { term: "notation", score: 12 },
+  { term: "moody", score: 12 },
+  { term: "fitch", score: 12 }
+];
+var GEOGRAPHIC_KEYWORDS = [
+  { term: "burkina faso", score: 12 },
+  { term: "ouagadougou", score: 10 },
+  { term: "c\xF4te d'ivoire", score: 12 },
+  { term: "abidjan", score: 10 },
+  { term: "s\xE9n\xE9gal", score: 12 },
+  { term: "dakar", score: 10 },
+  { term: "mali", score: 10 },
+  { term: "bamako", score: 8 },
+  { term: "niger", score: 10 },
+  { term: "niamey", score: 8 },
+  { term: "togo", score: 10 },
+  { term: "lom\xE9", score: 8 },
+  { term: "b\xE9nin", score: 10 },
+  { term: "cotonou", score: 8 },
+  { term: "guin\xE9e-bissau", score: 8 }
+];
+function calculateRelevanceScore(title, content) {
+  let score = 0;
+  const text = (title + " " + content).toLowerCase();
+  for (const kw of FIDELIS_KEYWORDS) {
+    if (text.includes(kw.term)) {
+      score += kw.score;
+    }
+  }
+  for (const kw of UEMOA_KEYWORDS) {
+    if (text.includes(kw.term)) {
+      score += kw.score;
+    }
+  }
+  for (const kw of FINANCE_KEYWORDS) {
+    if (text.includes(kw.term)) {
+      score += kw.score;
+    }
+  }
+  for (const kw of GEOGRAPHIC_KEYWORDS) {
+    if (text.includes(kw.term)) {
+      score += kw.score;
+    }
+  }
+  return Math.min(score, 100);
+}
+function extractTags2(title, content) {
+  const tags = [];
+  const text = (title + " " + content).toLowerCase();
+  if (text.includes("fidelis") || text.includes("secret bancaire") || text.includes("commission bancaire")) {
+    tags.push("FIDELIS");
+  }
+  if (text.includes("uemoa") || text.includes("umoa")) tags.push("UEMOA");
+  if (text.includes("brvm")) tags.push("BRVM");
+  if (text.includes("bceao")) tags.push("BCEAO");
+  if (text.includes("banque")) tags.push("Banque");
+  if (text.includes("finance") || text.includes("financier")) tags.push("Finance");
+  if (text.includes("investissement")) tags.push("Investissement");
+  if (text.includes("bourse") || text.includes("march\xE9 financier")) tags.push("March\xE9s");
+  if (text.includes("r\xE9gulation") || text.includes("r\xE9glementation")) tags.push("R\xE9gulation");
+  return [...new Set(tags)];
+}
+function generateSlug2(title) {
+  const baseSlug = title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").substring(0, 80);
+  return `${baseSlug}-${Date.now()}`;
+}
+function extractImageUrl(item) {
+  if (item.enclosure?.url) {
+    return item.enclosure.url;
+  }
+  if (item.mediaContent?.$?.url) {
+    return item.mediaContent.$.url;
+  }
+  const content = item.contentEncoded || item.content || "";
+  const imgMatch = content.match(/<img[^>]+src="([^">]+)"/);
+  if (imgMatch) {
+    return imgMatch[1];
+  }
+  return void 0;
+}
+function cleanHTML2(html) {
+  return html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, " ").trim();
+}
+function determineCategory(title, content, defaultCategory) {
+  const text = (title + " " + content).toLowerCase();
+  if (text.includes("r\xE9gulation") || text.includes("r\xE9glementation") || text.includes("commission bancaire") || text.includes("bceao") || text.includes("conformit\xE9")) {
+    return "regulation-conformite";
+  }
+  if (text.includes("brvm") || text.includes("bourse") || text.includes("march\xE9 financier") || text.includes("investissement") || text.includes("notation") || text.includes("obligation")) {
+    return "marches-investissements";
+  }
+  if (text.includes("banque") || text.includes("cr\xE9dit") || text.includes("finance") || text.includes("pr\xEAt")) {
+    return "banque-finance";
+  }
+  return defaultCategory || "analyses-decryptages";
+}
+async function scrapeRSSSource(source) {
+  const startTime = Date.now();
+  const result = {
+    articlesFound: 0,
+    articlesNew: 0,
+    articlesPublished: 0,
+    articlesPending: 0,
+    articlesSkipped: 0,
+    errors: [],
+    durationMs: 0
+  };
+  try {
+    console.log(`[RSS Auto] Scraping ${source.name}...`);
+    const feed = await parser2.parseURL(source.url);
+    result.articlesFound = feed.items?.length || 0;
+    for (const item of feed.items || []) {
+      try {
+        if (!item.link) {
+          result.articlesSkipped++;
+          continue;
+        }
+        const { data: existing } = await supabaseAdmin.from("articles").select("id").eq("source_url", item.link).single();
+        if (existing) {
+          result.articlesSkipped++;
+          continue;
+        }
+        const content = cleanHTML2(item.contentEncoded || item.content || item.contentSnippet || "");
+        const excerpt = content.substring(0, 300);
+        const imageUrl = extractImageUrl(item);
+        const relevanceScore = calculateRelevanceScore(item.title || "", content);
+        const tags = extractTags2(item.title || "", content);
+        const category = determineCategory(item.title || "", content, source.defaultCategory);
+        const slug = generateSlug2(item.title || "article");
+        let status = "pending";
+        if (source.autoPublish && relevanceScore >= 70) {
+          status = "published";
+        } else if (relevanceScore >= 50) {
+          status = "pending";
+        } else {
+          status = "draft";
+        }
+        const publishedAt = item.isoDate || item.pubDate || (/* @__PURE__ */ new Date()).toISOString();
+        const { error } = await supabaseAdmin.from("articles").insert({
+          id: `rss-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          title: item.title || "Sans titre",
+          slug,
+          excerpt,
+          content,
+          category,
+          tags,
+          source: {
+            name: source.name,
+            url: source.url
+          },
+          source_url: item.link,
+          published_at: publishedAt,
+          is_featured: false,
+          image_url: imageUrl || null,
+          status,
+          relevance_score: relevanceScore,
+          auto_published: status === "published"
+        });
+        if (error) {
+          result.errors.push(`Error inserting "${item.title}": ${error.message}`);
+        } else {
+          result.articlesNew++;
+          if (status === "published") {
+            result.articlesPublished++;
+          } else if (status === "pending") {
+            result.articlesPending++;
+          }
+        }
+      } catch (itemError) {
+        result.errors.push(`Error processing item: ${itemError.message}`);
+      }
+    }
+    await supabaseAdmin.from("rss_feeds").update({
+      last_scraped_at: (/* @__PURE__ */ new Date()).toISOString(),
+      last_fetch: (/* @__PURE__ */ new Date()).toISOString(),
+      last_error: result.errors.length > 0 ? result.errors[0] : null
+    }).eq("id", source.id);
+  } catch (error) {
+    console.error(`[RSS Auto] Error scraping ${source.name}:`, error.message);
+    result.errors.push(error.message);
+    await supabaseAdmin.from("rss_feeds").update({
+      last_error: error.message,
+      last_fetch: (/* @__PURE__ */ new Date()).toISOString()
+    }).eq("id", source.id);
+  }
+  result.durationMs = Date.now() - startTime;
+  console.log(`[RSS Auto] Finished ${source.name}: ${result.articlesNew} new articles in ${result.durationMs}ms`);
+  return result;
+}
+async function scrapeAllSources() {
+  console.log("[RSS Auto] Starting automatic scraping...");
+  const startTime = Date.now();
+  const { data: sources, error } = await supabaseAdmin.from("rss_feeds").select("*").eq("enabled", true);
+  if (error) {
+    console.error("[RSS Auto] Error fetching RSS sources:", error);
+    throw error;
+  }
+  if (!sources || sources.length === 0) {
+    console.log("[RSS Auto] No active RSS sources found");
+    return {
+      totalSources: 0,
+      results: {
+        articlesFound: 0,
+        articlesNew: 0,
+        articlesPublished: 0,
+        articlesPending: 0,
+        articlesSkipped: 0,
+        errors: [],
+        durationMs: 0
+      },
+      sourceResults: []
+    };
+  }
+  const sourceResults = [];
+  const totals = {
+    articlesFound: 0,
+    articlesNew: 0,
+    articlesPublished: 0,
+    articlesPending: 0,
+    articlesSkipped: 0,
+    errors: [],
+    durationMs: 0
+  };
+  for (const source of sources) {
+    const rssSource = {
+      id: source.id,
+      name: source.name,
+      url: source.url,
+      enabled: source.enabled,
+      autoPublish: source.auto_publish,
+      defaultCategory: source.default_category,
+      filters: source.filters
+    };
+    const result = await scrapeRSSSource(rssSource);
+    sourceResults.push({ source: source.name, result });
+    totals.articlesFound += result.articlesFound;
+    totals.articlesNew += result.articlesNew;
+    totals.articlesPublished += result.articlesPublished;
+    totals.articlesPending += result.articlesPending;
+    totals.articlesSkipped += result.articlesSkipped;
+    totals.errors.push(...result.errors);
+  }
+  totals.durationMs = Date.now() - startTime;
+  for (const { source, result } of sourceResults) {
+    const sourceData = sources.find((s) => s.name === source);
+    await supabaseAdmin.from("scraping_logs").insert({
+      source_id: sourceData?.id,
+      source_name: source,
+      articles_found: result.articlesFound,
+      articles_new: result.articlesNew,
+      articles_published: result.articlesPublished,
+      articles_pending: result.articlesPending,
+      articles_skipped: result.articlesSkipped,
+      errors: result.errors.length > 0 ? result.errors : null,
+      duration_ms: result.durationMs
+    });
+  }
+  console.log(`[RSS Auto] Scraping completed: ${totals.articlesNew} new articles from ${sources.length} sources in ${totals.durationMs}ms`);
+  return {
+    totalSources: sources.length,
+    results: totals,
+    sourceResults
+  };
+}
+var rssAutoService_default = {
+  calculateRelevanceScore,
+  extractTags: extractTags2,
+  generateSlug: generateSlug2,
+  scrapeRSSSource,
+  scrapeAllSources
+};
+
 // api/_index.ts
 init_supabase();
+var CRON_SECRET = process.env.CRON_SECRET || "default-cron-secret-change-me";
 function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
@@ -1199,15 +1580,24 @@ function mapCategoryToSlug(category) {
   const normalized = category.toLowerCase().trim();
   return categoryMap[normalized] || "analyses-decryptages";
 }
-var CACHE_TTL_MS = 60 * 1e3;
+var CACHE_TTL_ARTICLES_MS = 5 * 60 * 1e3;
+var CACHE_TTL_CATEGORIES_MS = 10 * 60 * 1e3;
+var CACHE_TTL_FEATURED_MS = 5 * 60 * 1e3;
+var CACHE_TTL_FIDELIS_MS = 5 * 60 * 1e3;
 var articlesCache = { entry: null };
 var categoriesCache = { entry: null };
-function isCacheValid(cache) {
+var featuredCache = { entry: null };
+var fidelisCache = { entry: null };
+var fidelisCountCache = { entry: null };
+function isCacheValid(cache, ttl) {
   if (!cache) return false;
-  return Date.now() - cache.timestamp < CACHE_TTL_MS;
+  return Date.now() - cache.timestamp < ttl;
 }
 function invalidateArticlesCache() {
   articlesCache.entry = null;
+  featuredCache.entry = null;
+  fidelisCache.entry = null;
+  fidelisCountCache.entry = null;
 }
 function invalidateCategoriesCache() {
   categoriesCache.entry = null;
@@ -1343,11 +1733,11 @@ app.post("/api/newsletter/subscribe", newsletterLimiter, async (req, res) => {
 app.get("/api/articles", async (_req, res) => {
   const startTime = Date.now();
   try {
-    if (isCacheValid(articlesCache.entry)) {
+    if (isCacheValid(articlesCache.entry, CACHE_TTL_ARTICLES_MS)) {
       const duration2 = Date.now() - startTime;
       logger_default.info("Articles served from cache", { duration: duration2, count: articlesCache.entry.data.length });
       res.setHeader("X-Cache", "HIT");
-      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+      res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
       return res.json(articlesCache.entry.data);
     }
     const publishedArticles = await supabaseStorage_default.getPublishedArticles();
@@ -1358,7 +1748,7 @@ app.get("/api/articles", async (_req, res) => {
     const duration = Date.now() - startTime;
     logger_default.info("Articles fetched from database", { duration, count: publishedArticles.length });
     res.setHeader("X-Cache", "MISS");
-    res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
     return res.json(publishedArticles);
   } catch (error) {
     const duration = Date.now() - startTime;
@@ -1385,11 +1775,11 @@ app.get("/api/articles/:slug", async (req, res) => {
 app.get("/api/categories", async (_req, res) => {
   const startTime = Date.now();
   try {
-    if (isCacheValid(categoriesCache.entry)) {
+    if (isCacheValid(categoriesCache.entry, CACHE_TTL_CATEGORIES_MS)) {
       const duration2 = Date.now() - startTime;
       logger_default.info("Categories served from cache", { duration: duration2, count: categoriesCache.entry.data.length });
       res.setHeader("X-Cache", "HIT");
-      res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+      res.setHeader("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=1200");
       return res.json(categoriesCache.entry.data);
     }
     const categories = await supabaseStorage_default.getCategories();
@@ -1400,7 +1790,7 @@ app.get("/api/categories", async (_req, res) => {
     const duration = Date.now() - startTime;
     logger_default.info("Categories fetched from database", { duration, count: categories.length });
     res.setHeader("X-Cache", "MISS");
-    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+    res.setHeader("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=1200");
     return res.json(categories);
   } catch (error) {
     const duration = Date.now() - startTime;
@@ -1432,6 +1822,73 @@ app.get("/api/dossiers/:slug", async (req, res) => {
   } catch (error) {
     logger_default.error("Public dossier get error", { slug: req.params.slug }, error);
     return res.status(500).json({ error: "Erreur lors de la r\xE9cup\xE9ration du dossier" });
+  }
+});
+app.post("/api/scrape-rss", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${CRON_SECRET}`) {
+      logger_default.warn("Unauthorized scrape-rss attempt");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    logger_default.info("Starting automatic RSS scraping...");
+    const startTime = Date.now();
+    const results = await rssAutoService_default.scrapeAllSources();
+    const duration = Date.now() - startTime;
+    logger_default.info("RSS scraping completed", {
+      duration,
+      sources: results.totalSources,
+      newArticles: results.results.articlesNew,
+      published: results.results.articlesPublished,
+      pending: results.results.articlesPending
+    });
+    invalidateArticlesCache();
+    return res.json({
+      success: true,
+      message: "RSS scraping completed",
+      duration: `${duration}ms`,
+      ...results.results,
+      sourceResults: results.sourceResults.map((sr) => ({
+        source: sr.source,
+        found: sr.result.articlesFound,
+        new: sr.result.articlesNew,
+        published: sr.result.articlesPublished,
+        pending: sr.result.articlesPending,
+        errors: sr.result.errors.length
+      }))
+    });
+  } catch (error) {
+    logger_default.error("RSS scraping error", void 0, error);
+    return res.status(500).json({
+      error: "RSS scraping failed",
+      message: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+app.get("/api/scrape-rss", async (req, res) => {
+  const secret = req.query.secret;
+  if (secret !== CRON_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  try {
+    logger_default.info("Starting manual RSS scraping...");
+    const results = await rssAutoService_default.scrapeAllSources();
+    invalidateArticlesCache();
+    return res.json({
+      success: true,
+      message: "RSS scraping completed",
+      ...results.results,
+      sourceResults: results.sourceResults.map((sr) => ({
+        source: sr.source,
+        found: sr.result.articlesFound,
+        new: sr.result.articlesNew,
+        published: sr.result.articlesPublished,
+        pending: sr.result.articlesPending
+      }))
+    });
+  } catch (error) {
+    logger_default.error("Manual RSS scraping error", void 0, error);
+    return res.status(500).json({ error: "RSS scraping failed" });
   }
 });
 app.post("/api/admin/login", async (req, res) => {

@@ -20,6 +20,33 @@ interface OptimizedImageProps {
 // Default sizes for responsive images
 const DEFAULT_SIZES = "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw";
 
+// Cloudinary configuration
+const CLOUDINARY_CLOUD_NAME = 'dglxf0y5i';
+
+/**
+ * Optimize image URL using Cloudinary
+ * @param src - Original image URL
+ * @param width - Target width in pixels
+ * @param quality - Image quality (1-100), default 80
+ * @returns Optimized Cloudinary URL or original URL if local
+ */
+function optimizeImageUrl(src: string, width: number, quality: number = 80): string {
+  // Skip optimization for local images (relative paths or data URLs)
+  if (!src || src.startsWith('/') || src.startsWith('data:')) {
+    return src;
+  }
+  
+  // Only optimize external URLs (http:// or https://)
+  if (src.startsWith('http://') || src.startsWith('https://')) {
+    // Cloudinary fetch API with automatic format and quality optimization
+    const cloudinaryUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/fetch/f_auto,q_${quality},w_${width},c_limit/${encodeURIComponent(src)}`;
+    return cloudinaryUrl;
+  }
+  
+  // Return original URL for any other case
+  return src;
+}
+
 /**
  * Optimized Image component with:
  * - Native lazy loading
@@ -109,8 +136,9 @@ export default function OptimizedImage({
       }}
     >
       {shouldLoad && (
+        /* Image optimized via Cloudinary (automatic WebP/AVIF conversion, compression, and resizing) */
         <img
-          src={imageSrc}
+          src={optimizeImageUrl(imageSrc, defaultWidth)}
           alt={alt}
           width={defaultWidth}
           height={defaultHeight}
