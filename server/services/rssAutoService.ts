@@ -128,6 +128,93 @@ const GEOGRAPHIC_KEYWORDS = [
   { term: "guinée-bissau", score: 8 },
 ];
 
+// ============ CATEGORY VALIDATION ============
+
+// Valid category slugs from the database
+const VALID_CATEGORIES = new Set([
+  "banque-finance",
+  "regulation-conformite",
+  "marches-investissements",
+  "analyses-decryptages",
+  "actualite",
+]);
+
+// Mapping from common category names to valid slugs
+const CATEGORY_MAPPING: Record<string, string> = {
+  // Finance variants
+  "finance": "banque-finance",
+  "banque": "banque-finance",
+  "banque-finance": "banque-finance",
+  
+  // Actualités variants
+  "actualités": "actualite",
+  "actualites": "actualite",
+  "actualité": "actualite",
+  "actualite": "actualite",
+  "news": "actualite",
+  
+  // Économie variants
+  "économie": "analyses-decryptages",
+  "economie": "analyses-decryptages",
+  "economy": "analyses-decryptages",
+  
+  // Régulation variants
+  "régulation": "regulation-conformite",
+  "regulation": "regulation-conformite",
+  "conformité": "regulation-conformite",
+  "conformite": "regulation-conformite",
+  "regulation-conformite": "regulation-conformite",
+  
+  // Marchés variants
+  "marchés": "marches-investissements",
+  "marches": "marches-investissements",
+  "investissement": "marches-investissements",
+  "investissements": "marches-investissements",
+  "marches-investissements": "marches-investissements",
+  
+  // Analyses variants
+  "analyses": "analyses-decryptages",
+  "décryptages": "analyses-decryptages",
+  "decryptages": "analyses-decryptages",
+  "analyses-decryptages": "analyses-decryptages",
+  
+  // Political/general variants
+  "politique": "analyses-decryptages",
+  "technologie": "analyses-decryptages",
+};
+
+// Default fallback category
+const DEFAULT_CATEGORY = "analyses-decryptages";
+
+/**
+ * Validate and map a category to a valid database slug
+ * @param category - The category to validate (can be a slug or a display name)
+ * @returns A valid category slug from the database
+ */
+function validateAndMapCategory(category: string | undefined | null): string {
+  if (!category) {
+    return DEFAULT_CATEGORY;
+  }
+
+  // Normalize the category (lowercase, trim)
+  const normalized = category.toLowerCase().trim();
+
+  // Check if it's already a valid category slug
+  if (VALID_CATEGORIES.has(normalized)) {
+    return normalized;
+  }
+
+  // Try to map from the mapping table
+  const mapped = CATEGORY_MAPPING[normalized];
+  if (mapped) {
+    return mapped;
+  }
+
+  // Log warning for unmapped categories
+  console.warn(`[RSS Auto] Unknown category "${category}", using default "${DEFAULT_CATEGORY}"`);
+  return DEFAULT_CATEGORY;
+}
+
 /**
  * Calculate relevance score for an article based on keywords
  */
@@ -252,11 +339,12 @@ function cleanHTML(html: string): string {
 
 /**
  * Determine category based on content
+ * Returns a validated category slug that exists in the database
  */
 function determineCategory(title: string, content: string, defaultCategory?: string): string {
   const text = (title + " " + content).toLowerCase();
 
-  // Check for specific categories
+  // Check for specific categories based on content keywords
   if (text.includes("régulation") || text.includes("réglementation") || 
       text.includes("commission bancaire") || text.includes("bceao") ||
       text.includes("conformité")) {
@@ -274,7 +362,8 @@ function determineCategory(title: string, content: string, defaultCategory?: str
     return "banque-finance";
   }
 
-  return defaultCategory || "analyses-decryptages";
+  // Validate and map the defaultCategory to ensure it's a valid database slug
+  return validateAndMapCategory(defaultCategory);
 }
 
 /**

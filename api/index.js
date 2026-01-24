@@ -1316,6 +1316,58 @@ var GEOGRAPHIC_KEYWORDS = [
   { term: "cotonou", score: 8 },
   { term: "guin\xE9e-bissau", score: 8 }
 ];
+var VALID_CATEGORIES = new Set([
+  "banque-finance",
+  "regulation-conformite",
+  "marches-investissements",
+  "analyses-decryptages",
+  "actualite"
+]);
+var CATEGORY_MAPPING = {
+  "finance": "banque-finance",
+  "banque": "banque-finance",
+  "banque-finance": "banque-finance",
+  "actualit\xE9s": "actualite",
+  "actualites": "actualite",
+  "actualit\xE9": "actualite",
+  "actualite": "actualite",
+  "news": "actualite",
+  "\xE9conomie": "analyses-decryptages",
+  "economie": "analyses-decryptages",
+  "economy": "analyses-decryptages",
+  "r\xE9gulation": "regulation-conformite",
+  "regulation": "regulation-conformite",
+  "conformit\xE9": "regulation-conformite",
+  "conformite": "regulation-conformite",
+  "regulation-conformite": "regulation-conformite",
+  "march\xE9s": "marches-investissements",
+  "marches": "marches-investissements",
+  "investissement": "marches-investissements",
+  "investissements": "marches-investissements",
+  "marches-investissements": "marches-investissements",
+  "analyses": "analyses-decryptages",
+  "d\xE9cryptages": "analyses-decryptages",
+  "decryptages": "analyses-decryptages",
+  "analyses-decryptages": "analyses-decryptages",
+  "politique": "analyses-decryptages",
+  "technologie": "analyses-decryptages"
+};
+var DEFAULT_CATEGORY = "analyses-decryptages";
+function validateAndMapCategory(category) {
+  if (!category) {
+    return DEFAULT_CATEGORY;
+  }
+  var normalized = category.toLowerCase().trim();
+  if (VALID_CATEGORIES.has(normalized)) {
+    return normalized;
+  }
+  var mapped = CATEGORY_MAPPING[normalized];
+  if (mapped) {
+    return mapped;
+  }
+  console.warn(`[RSS Auto] Unknown category "${category}", using default "${DEFAULT_CATEGORY}"`);
+  return DEFAULT_CATEGORY;
+}
 function calculateRelevanceScore(title, content) {
   let score = 0;
   const text = (title + " " + content).toLowerCase();
@@ -1389,7 +1441,7 @@ function determineCategory(title, content, defaultCategory) {
   if (text.includes("banque") || text.includes("cr\xE9dit") || text.includes("finance") || text.includes("pr\xEAt")) {
     return "banque-finance";
   }
-  return defaultCategory || "analyses-decryptages";
+  return validateAndMapCategory(defaultCategory);
 }
 async function scrapeRSSSource(source) {
   const startTime = Date.now();
