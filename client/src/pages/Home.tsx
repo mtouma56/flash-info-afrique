@@ -9,13 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useArticles } from "@/hooks/useArticles";
+import { useDossier } from "@/hooks/useDossiers";
 import { AlertCircle, ArrowRight, Loader2, Mail, TrendingUp } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 
 export default function Home() {
   const { articles, categories, isLoading } = useArticles();
+  const { dossier: fidelisDossier } = useDossier("fidelis");
   const [email, setEmail] = useState("");
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -59,14 +61,17 @@ export default function Home() {
   };
 
   // Articles FIDELIS pour l'encart spécial
-  // Check for both "FIDELIS" and "FIDELIS Finance" tags for compatibility
-  const fidelisArticles = articles.filter((a) =>
-    a.tags.some(tag => 
-      tag === "FIDELIS" || 
-      tag === "FIDELIS Finance" || 
-      tag.toLowerCase().includes("fidelis")
-    )
-  );
+  // Uses same logic as Dossier page: check articleIds OR tag matching
+  const fidelisArticles = useMemo(() => {
+    return articles.filter((a) =>
+      (fidelisDossier?.articleIds?.includes(a.id)) ||
+      a.tags.some(tag => 
+        tag === "FIDELIS" || 
+        tag === "FIDELIS Finance" || 
+        tag.toLowerCase().includes("fidelis")
+      )
+    );
+  }, [articles, fidelisDossier]);
 
   const handleNewsletterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
