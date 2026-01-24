@@ -15,6 +15,23 @@ ADD COLUMN IF NOT EXISTS source_url TEXT,
 ADD COLUMN IF NOT EXISTS relevance_score INTEGER DEFAULT 0,
 ADD COLUMN IF NOT EXISTS auto_published BOOLEAN DEFAULT FALSE;
 
+-- Update the status constraint to include 'pending' for RSS articles awaiting review
+-- First, drop the existing constraint if it exists
+DO $$
+BEGIN
+  -- Check if the constraint exists and doesn't include 'pending'
+  IF EXISTS (
+    SELECT 1 FROM information_schema.check_constraints 
+    WHERE constraint_name = 'articles_status_check'
+  ) THEN
+    -- Drop the old constraint
+    ALTER TABLE articles DROP CONSTRAINT articles_status_check;
+    -- Add the new constraint with 'pending'
+    ALTER TABLE articles ADD CONSTRAINT articles_status_check 
+      CHECK (status IN ('draft', 'pending', 'published', 'archived'));
+  END IF;
+END $$;
+
 -- Create unique index on source_url for duplicate detection
 CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_source_url 
 ON articles(source_url) 
@@ -56,14 +73,32 @@ ON scraping_logs(scraped_at DESC);
 ALTER TABLE scraping_logs ENABLE ROW LEVEL SECURITY;
 
 -- Only admins can view scraping logs
-CREATE POLICY IF NOT EXISTS "Scraping logs are viewable by admins"
-  ON scraping_logs FOR SELECT
-  USING (is_admin());
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'scraping_logs' 
+    AND policyname = 'Scraping logs are viewable by admins'
+  ) THEN
+    CREATE POLICY "Scraping logs are viewable by admins"
+      ON scraping_logs FOR SELECT
+      USING (is_admin());
+  END IF;
+END $$;
 
 -- Only admins can insert scraping logs (or service role)
-CREATE POLICY IF NOT EXISTS "Scraping logs are insertable by admins"
-  ON scraping_logs FOR INSERT
-  WITH CHECK (true); -- Service role bypasses RLS
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'scraping_logs' 
+    AND policyname = 'Scraping logs are insertable by admins'
+  ) THEN
+    CREATE POLICY "Scraping logs are insertable by admins"
+      ON scraping_logs FOR INSERT
+      WITH CHECK (true); -- Service role bypasses RLS
+  END IF;
+END $$;
 
 -- ============================================
 -- CLEANUP FUNCTION FOR OLD LOGS

@@ -35,10 +35,48 @@ Ce guide détaille les étapes pour déployer Flash Info Afrique en production.
 
 ### 2. Exécuter les migrations
 
-Dans l'éditeur SQL de Supabase, exécutez le contenu du fichier :
+Dans l'éditeur SQL de Supabase, exécutez les migrations **dans l'ordre** :
+
+#### Migration 1 : Schéma initial (obligatoire)
 
 ```bash
 supabase/migrations/001_initial_schema.sql
+```
+
+#### Migration 2 : RSS Auto-Scraping (obligatoire pour le scraping RSS)
+
+Cette migration ajoute les colonnes nécessaires pour le scraping RSS automatique :
+- `source_url`, `relevance_score`, `auto_published` dans la table `articles`
+- `last_scraped_at`, `scrape_frequency_hours`, `article_count` dans la table `rss_feeds`
+- Table `scraping_logs` pour le suivi des scrapings
+- Mise à jour de la contrainte de statut pour inclure `pending`
+
+```bash
+supabase/migrations/20260124_rss_auto_schema.sql
+```
+
+#### Migration 3 : Index de performance (recommandée)
+
+```bash
+supabase/migrations/20260124_add_performance_indexes.sql
+```
+
+#### Migration 4 : Sources RSS (optionnelle)
+
+```bash
+supabase/migrations/20260124_insert_rss_sources.sql
+```
+
+#### Vérification du schéma
+
+Après avoir exécuté les migrations, vérifiez que tout est correct :
+
+```bash
+# Vérifier les colonnes manquantes
+npx tsx scripts/verify-schema.ts
+
+# Tester l'insertion d'articles RSS
+npx tsx scripts/test-rss-insert.ts
 ```
 
 ### 3. Configurer l'authentification
@@ -417,7 +455,11 @@ sudo systemctl restart flash-info-afrique
 - [ ] Tests passent localement (`pnpm test:run`)
 - [ ] Build réussi (`pnpm build`)
 - [ ] Variables d'environnement configurées
-- [ ] Migrations Supabase appliquées
+- [ ] Migrations Supabase appliquées :
+  - [ ] `001_initial_schema.sql`
+  - [ ] `20260124_rss_auto_schema.sql` (pour RSS)
+  - [ ] `20260124_add_performance_indexes.sql`
+- [ ] Vérification du schéma (`npx tsx scripts/verify-schema.ts`)
 - [ ] Sauvegarde de la version actuelle
 
 ### Pendant le déploiement
@@ -441,6 +483,38 @@ sudo systemctl restart flash-info-afrique
 2. Vérifier Nginx : `tail -f /var/log/nginx/flashinfo.error.log`
 3. Si nécessaire, effectuer un rollback
 4. Contacter l'équipe si le problème persiste
+
+## Dépannage
+
+### Erreur RSS : "Could not find the 'auto_published' column"
+
+Cette erreur indique que la migration RSS n'a pas été exécutée. Solution :
+
+1. Exécutez la migration dans Supabase SQL Editor :
+   ```bash
+   supabase/migrations/20260124_rss_auto_schema.sql
+   ```
+
+2. Vérifiez avec le script de vérification :
+   ```bash
+   npx tsx scripts/verify-schema.ts
+   ```
+
+3. Testez l'insertion :
+   ```bash
+   npx tsx scripts/test-rss-insert.ts
+   ```
+
+### Erreur RSS : "violates check constraint articles_status_check"
+
+Le statut `pending` n'est pas dans la contrainte. La migration `20260124_rss_auto_schema.sql` corrige cela automatiquement.
+
+### Le scraping fonctionne mais 0 articles insérés
+
+Vérifiez :
+1. Que toutes les migrations ont été appliquées
+2. Que les colonnes `source_url`, `relevance_score`, `auto_published` existent
+3. Les logs d'erreur dans la réponse de l'endpoint `/api/admin/rss/scrape`
 
 ## Support
 
