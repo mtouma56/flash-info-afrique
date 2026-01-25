@@ -55,12 +55,12 @@ export default function ArticleCard({
             </div>
 
             {/* Content */}
-            <CardContent className="p-4 md:p-6 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center gap-3 mb-4">
+            <CardContent className="p-3 sm:p-4 md:p-6 flex flex-col justify-between overflow-hidden">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                   <Badge
                     variant="outline"
-                    className="font-medium"
+                    className="font-medium text-xs sm:text-sm shrink-0"
                     style={{
                       borderColor: category?.color,
                       color: category?.color,
@@ -68,23 +68,23 @@ export default function ArticleCard({
                   >
                     {category?.name}
                   </Badge>
-                  <div className="flex items-center text-sm text-muted-foreground font-mono">
-                    <Calendar className="h-4 w-4 mr-1" aria-hidden="true" />
+                  <div className="flex items-center text-xs sm:text-sm text-muted-foreground font-mono">
+                    <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1 shrink-0" aria-hidden="true" />
                     <time dateTime={article.publishedAt}>{formattedDate}</time>
                   </div>
                 </div>
 
-                <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground mb-3 group-hover:text-primary transition-colors line-clamp-3">
+                <h2 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-foreground mb-2 sm:mb-3 group-hover:text-primary transition-colors line-clamp-3 break-words">
                   {article.title}
                 </h2>
 
-                <p className="text-muted-foreground mb-3 line-clamp-2">
+                <p className="text-sm sm:text-base text-muted-foreground mb-2 sm:mb-3 line-clamp-2 break-words">
                   {article.excerpt}
                 </p>
 
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                  <span>Source : {article.source.name}</span>
+                <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
+                  <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" aria-hidden="true" />
+                  <span className="truncate">Source : {article.source.name}</span>
                 </div>
               </div>
 
@@ -130,11 +130,11 @@ export default function ArticleCard({
         </div>
 
         {/* Content */}
-        <CardContent className="p-5 flex-1 flex flex-col">
-          <div className="flex items-center gap-2 mb-3">
+        <CardContent className="p-3 sm:p-4 md:p-5 flex-1 flex flex-col overflow-hidden">
+          <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-3">
             <Badge
               variant="outline"
-              className="text-xs font-medium"
+              className="text-xs font-medium shrink-0"
               style={{
                 borderColor: category?.color,
                 color: category?.color,
@@ -143,36 +143,36 @@ export default function ArticleCard({
               {category?.name}
             </Badge>
             <div className="flex items-center text-xs text-muted-foreground font-mono">
-              <Calendar className="h-3 w-3 mr-1" aria-hidden="true" />
+              <Calendar className="h-3 w-3 mr-1 shrink-0" aria-hidden="true" />
               <time dateTime={article.publishedAt}>{formattedDate}</time>
             </div>
           </div>
 
-          <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-primary transition-colors line-clamp-2">
+          <h3 className="text-base sm:text-lg font-bold text-foreground mb-2 group-hover:text-primary transition-colors line-clamp-2 break-words">
             {article.title}
           </h3>
 
-          <p className="text-sm text-muted-foreground mb-4 line-clamp-2 flex-1">
+          <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4 line-clamp-2 flex-1 break-words">
             {article.excerpt}
           </p>
 
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
-            <ExternalLink className="h-3 w-3" aria-hidden="true" />
-            <span>{article.source.name}</span>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3 sm:mb-4">
+            <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="truncate">{article.source.name}</span>
           </div>
 
-          <div className="flex items-center justify-between mt-auto">
+          <div className="flex items-center justify-between mt-auto gap-2">
             <Link href={`/article/${article.slug}`}>
-              <Button variant="outline" size="sm" className="group/btn">
+              <Button variant="outline" size="sm" className="group/btn text-xs sm:text-sm">
                 Lire
-                <ArrowRight className="ml-2 h-3 w-3 group-hover/btn:translate-x-1 transition-transform" aria-hidden="true" />
+                <ArrowRight className="ml-1 sm:ml-2 h-3 w-3 group-hover/btn:translate-x-1 transition-transform" aria-hidden="true" />
               </Button>
             </Link>
             <a
               href={article.source.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-primary hover:underline"
+              className="text-xs text-primary hover:underline truncate"
             >
               Source →
             </a>

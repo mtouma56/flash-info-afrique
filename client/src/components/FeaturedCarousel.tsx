@@ -75,7 +75,7 @@ export default function FeaturedCarousel({
   }
 
   return (
-    <div className="relative">
+    <div className="relative overflow-hidden max-w-full">
       <Carousel
         setApi={setApi}
         opts={{
@@ -83,11 +83,11 @@ export default function FeaturedCarousel({
           align: "start",
         }}
         plugins={[autoplayPlugin]}
-        className="w-full"
+        className="w-full max-w-full"
       >
-        <CarouselContent>
+        <CarouselContent className="max-w-full">
           {articles.map((article) => (
-            <CarouselItem key={article.id}>
+            <CarouselItem key={article.id} className="max-w-full">
               <ArticleCard article={article} featured />
             </CarouselItem>
           ))}
@@ -95,18 +95,18 @@ export default function FeaturedCarousel({
 
         {/* Boutons de navigation - positionnés à l'intérieur */}
         <CarouselPrevious
-          className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background border-border shadow-lg h-10 w-10 sm:h-8 sm:w-8"
+          className="absolute left-1 sm:left-4 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background border-border shadow-lg h-8 w-8 sm:h-8 sm:w-8"
           aria-label="Article précédent"
         />
         <CarouselNext
-          className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background border-border shadow-lg h-10 w-10 sm:h-8 sm:w-8"
+          className="absolute right-1 sm:right-4 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background border-border shadow-lg h-8 w-8 sm:h-8 sm:w-8"
           aria-label="Article suivant"
         />
       </Carousel>
 
       {/* Indicateurs de pagination (dots) */}
       <div
-        className="flex justify-center gap-3 sm:gap-2 mt-4"
+        className="flex justify-center gap-2 mt-3 sm:mt-4 flex-wrap"
         role="tablist"
         aria-label="Navigation des articles en vedette"
       >
@@ -115,11 +115,11 @@ export default function FeaturedCarousel({
             key={index}
             onClick={() => scrollTo(index)}
             className={cn(
-              "w-3 h-3 sm:w-2.5 sm:h-2.5 rounded-full transition-all duration-300",
+              "w-2.5 h-2.5 sm:w-2.5 sm:h-2.5 rounded-full transition-all duration-300",
               "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
-              "min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center",
+              "p-2 flex items-center justify-center",
               current === index
-                ? "bg-primary w-8 sm:w-6"
+                ? "bg-primary w-6 sm:w-6"
                 : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
             )}
             role="tab"
