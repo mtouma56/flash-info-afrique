@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" fill="none">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+    </pattern>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="800" height="450" fill="url(#bgGradient)"/>
+  <rect width="800" height="450" fill="url(#grid)"/>
+  
+  <!-- Decorative circles -->
+  <circle cx="680" cy="120" r="140" fill="rgba(255,255,255,0.03)"/>
+  <circle cx="120" cy="340" r="110" fill="rgba(255,255,255,0.03)"/>
+  
+  <!-- Chart area background -->
+  <rect x="150" y="100" width="500" height="250" fill="rgba(255,255,255,0.05)" rx="10"/>
+  
+  <!-- Grid lines -->
+  <g stroke="rgba(255,255,255,0.1)" stroke-width="1">
+    <line x1="150" y1="150" x2="650" y2="150"/>
+    <line x1="150" y1="200" x2="650" y2="200"/>
+    <line x1="150" y1="250" x2="650" y2="250"/>
+    <line x1="150" y1="300" x2="650" y2="300"/>
+  </g>
+  
+  <!-- Rising trend line -->
+  <polyline 
+    points="180,320 240,290 300,300 360,250 420,220 480,180 540,150 600,120" 
+    fill="none" 
+    stroke="rgba(255,255,255,0.9)" 
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
+  
+  <!-- Area under the line -->
+  <polygon 
+    points="180,320 240,290 300,300 360,250 420,220 480,180 540,150 600,120 600,350 180,350" 
+    fill="rgba(255,255,255,0.15)"/>
+  
+  <!-- Data points -->
+  <circle cx="180" cy="320" r="6" fill="white"/>
+  <circle cx="240" cy="290" r="6" fill="white"/>
+  <circle cx="300" cy="300" r="6" fill="white"/>
+  <circle cx="360" cy="250" r="6" fill="white"/>
+  <circle cx="420" cy="220" r="6" fill="white"/>
+  <circle cx="480" cy="180" r="6" fill="white"/>
+  <circle cx="540" cy="150" r="6" fill="white"/>
+  <circle cx="600" cy="120" r="8" fill="white" stroke="rgba(16,185,129,1)" stroke-width="3"/>
+  
+  <!-- Arrow up indicator -->
+  <g transform="translate(620, 100)">
+    <polygon points="20,0 40,25 30,25 30,50 10,50 10,25 0,25" fill="rgba(255,255,255,0.9)"/>
+  </g>
+  
+  <!-- Percentage indicator -->
+  <text x="680" y="95" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="rgba(255,255,255,0.9)">+12%</text>
+  
+  <!-- Bar chart elements -->
+  <rect x="100" y="280" width="25" height="70" fill="rgba(255,255,255,0.2)" rx="3"/>
+  <rect x="700" y="200" width="25" height="150" fill="rgba(255,255,255,0.2)" rx="3"/>
+  
+  <!-- Bottom label -->
+  <rect x="0" y="400" width="800" height="50" fill="rgba(0,0,0,0.3)"/>
+  <text x="400" y="432" font-family="Arial, sans-serif" font-size="18" font-weight="600" fill="white" text-anchor="middle">MARCHÉS &amp; INVESTISSEMENTS</text>
+</svg>

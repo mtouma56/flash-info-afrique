@@ -322,6 +322,22 @@ function extractImageUrl(item: any): string | undefined {
 }
 
 /**
+ * Get default image URL based on article category
+ * @param category - The category slug
+ * @returns The path to the default image for that category
+ */
+function getDefaultImageForCategory(category: string): string {
+  const defaultImages: Record<string, string> = {
+    'banque-finance': '/default-banque-finance.svg',
+    'regulation-conformite': '/default-regulation-conformite.svg',
+    'marches-investissements': '/default-marches-investissements.svg',
+    'analyses-decryptages': '/default-analyses-decryptages.svg',
+    'actualite': '/default-actualite.svg',
+  };
+  return defaultImages[category] || '/default-actualite.svg';
+}
+
+/**
  * Clean HTML from content
  */
 function cleanHTML(html: string): string {
@@ -438,6 +454,9 @@ export async function scrapeRSSSource(source: RSSSource): Promise<ScrapingResult
         // Parse publication date
         const publishedAt = item.isoDate || item.pubDate || new Date().toISOString();
 
+        // Use extracted image or fall back to category-specific default image
+        const finalImageUrl = imageUrl || getDefaultImageForCategory(category);
+
         // Insert the article
         const { error } = await supabaseAdmin.from("articles").insert({
           id: `rss-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -454,7 +473,7 @@ export async function scrapeRSSSource(source: RSSSource): Promise<ScrapingResult
           source_url: item.link,
           published_at: publishedAt,
           is_featured: false,
-          image_url: imageUrl || null,
+          image_url: finalImageUrl,
           status,
           relevance_score: relevanceScore,
           auto_published: status === "published",
