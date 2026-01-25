@@ -17,6 +17,9 @@ const Articles = lazy(() => import("./pages/Articles"));
 const Dossier = lazy(() => import("./pages/Dossier"));
 const Article = lazy(() => import("./pages/Article"));
 const Category = lazy(() => import("./pages/Category"));
+const MentionsLegales = lazy(() => import("./pages/MentionsLegales"));
+const Confidentialite = lazy(() => import("./pages/Confidentialite"));
+const ConditionsUtilisation = lazy(() => import("./pages/ConditionsUtilisation"));
 
 // Lazy load admin pages
 const AdminLogin = lazy(() => import("./pages/admin/Login"));
@@ -55,6 +58,9 @@ function Router() {
         <Route path="/dossier/:slug" component={Dossier} />
         <Route path="/article/:slug" component={Article} />
         <Route path="/categorie/:slug" component={Category} />
+        <Route path="/mentions-legales" component={MentionsLegales} />
+        <Route path="/confidentialite" component={Confidentialite} />
+        <Route path="/conditions-utilisation" component={ConditionsUtilisation} />
 
         {/* Admin login (public) */}
         <Route path="/admin/login" component={AdminLogin} />

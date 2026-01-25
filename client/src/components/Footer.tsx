@@ -75,28 +75,28 @@ export default function Footer() {
             </h4>
             <ul className="space-y-2 text-sm">
               <li>
-                <a
-                  href="#mentions-legales"
+                <Link
+                  href="/mentions-legales"
                   className="text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded"
                 >
                   Mentions légales
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#confidentialite"
+                <Link
+                  href="/confidentialite"
                   className="text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded"
                 >
                   Politique de confidentialité
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#cgu"
+                <Link
+                  href="/conditions-utilisation"
                   className="text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded"
                 >
                   Conditions d'utilisation
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
