@@ -164,9 +164,11 @@ export default function Home() {
               violation présumée du secret bancaire, destruction de preuves et subornation de témoin.
             </p>
 
-            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8 min-w-0">
               {fidelisArticles.slice(0, 3).map((article) => (
-                <ArticleCard key={article.id} article={article} />
+                <div key={article.id} className="min-w-0">
+                  <ArticleCard article={article} />
+                </div>
               ))}
             </div>
 
@@ -227,10 +229,12 @@ export default function Home() {
           </div>
 
           {/* Articles grid */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6" role="tabpanel">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 min-w-0" role="tabpanel">
             {regularArticles.length > 0 ? (
               regularArticles.map((article) => (
-                <ArticleCard key={article.id} article={article} />
+                <div key={article.id} className="min-w-0">
+                  <ArticleCard article={article} />
+                </div>
               ))
             ) : (
               <div className="col-span-full text-center py-12">

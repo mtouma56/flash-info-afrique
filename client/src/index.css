@@ -232,9 +232,21 @@
     min-width: 0;
   }
   
-  /* Prevent flex children from overflowing on mobile */
+  /* Prevent grid/flex children from overflowing on mobile */
   .grid {
     max-width: 100%;
+    min-width: 0;
+  }
+  
+  .grid > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  
+  /* Ensure cards don't overflow */
+  [data-slot="card"] {
+    max-width: 100%;
+    min-width: 0;
   }
 
   @media (min-width: 640px) {

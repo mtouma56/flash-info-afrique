@@ -28,9 +28,9 @@ export default function ArticleCard({
 
   if (featured) {
     return (
-      <article className="group">
-        <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 border-2 hover:border-primary/20">
-          <div className="grid md:grid-cols-2 gap-0">
+      <article className="group min-w-0 max-w-full">
+        <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 border-2 hover:border-primary/20 max-w-full">
+          <div className="grid md:grid-cols-2 gap-0 min-w-0">
             {/* Image */}
             <div className="relative h-48 md:h-72 overflow-hidden">
               <OptimizedImage
@@ -112,8 +112,8 @@ export default function ArticleCard({
   }
 
   return (
-    <article className="group">
-      <Card className="overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1 h-full flex flex-col">
+    <article className="group min-w-0 max-w-full">
+      <Card className="overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1 h-full flex flex-col max-w-full">
         {/* Image */}
         <div className="relative h-48 overflow-hidden">
           <OptimizedImage

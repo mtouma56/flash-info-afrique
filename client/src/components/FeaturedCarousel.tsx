@@ -85,10 +85,12 @@ export default function FeaturedCarousel({
         plugins={[autoplayPlugin]}
         className="w-full max-w-full"
       >
-        <CarouselContent className="max-w-full">
+        <CarouselContent className="max-w-full min-w-0">
           {articles.map((article) => (
-            <CarouselItem key={article.id} className="max-w-full">
-              <ArticleCard article={article} featured />
+            <CarouselItem key={article.id} className="max-w-full min-w-0">
+              <div className="min-w-0 max-w-full">
+                <ArticleCard article={article} featured />
+              </div>
             </CarouselItem>
           ))}
         </CarouselContent>
