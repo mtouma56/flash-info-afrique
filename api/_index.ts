@@ -16,6 +16,8 @@ import {
 import storage from "../server/data/supabaseStorage";
 import rssService from "../server/services/rssService";
 import rssAutoService from "../server/services/rssAutoService";
+import emailService from "../server/services/emailService";
+import newsletterService from "../server/services/newsletterService";
 import { supabaseAdmin } from "../server/lib/supabase";
 import logger from "../server/lib/logger";
 
@@ -234,21 +236,126 @@ app.post("/api/newsletter/subscribe", newsletterLimiter, async (req, res) => {
       return res.status(400).json({ error: "L'adresse email n'est pas valide." });
     }
 
-    const isSubscribed = await storage.isNewsletterSubscribed(trimmedEmail);
-    if (isSubscribed) {
-      return res.status(409).json({ error: "Cette adresse email est déjà inscrite." });
+    // Subscribe and get confirmation token
+    const result = await storage.subscribeNewsletter(trimmedEmail);
+    
+    if (!result.success) {
+      if (result.alreadyConfirmed) {
+        return res.status(409).json({ error: "Cette adresse email est déjà inscrite." });
+      }
+      return res.status(500).json({ error: "Une erreur est survenue. Veuillez réessayer." });
     }
 
-    await storage.subscribeNewsletter(trimmedEmail);
-    logger.info("Newsletter subscription", { email: trimmedEmail });
+    // Send confirmation email
+    if (result.token) {
+      const emailSent = await emailService.sendConfirmationEmail(trimmedEmail, result.token);
+      if (!emailSent) {
+        logger.warn("Failed to send confirmation email, but subscription created", { email: trimmedEmail });
+      }
+    }
+
+    logger.info("Newsletter subscription initiated", { email: trimmedEmail });
 
     return res.status(201).json({
       success: true,
-      message: "Inscription réussie ! Vous recevrez notre newsletter chaque vendredi.",
+      message: "Un email de confirmation vous a été envoyé. Veuillez vérifier votre boîte de réception.",
     });
   } catch (error) {
     logger.error("Newsletter subscription error", undefined, error);
     return res.status(500).json({ error: "Une erreur est survenue. Veuillez réessayer." });
+  }
+});
+
+// Newsletter confirmation endpoint
+app.get("/api/newsletter/confirm", async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token || typeof token !== "string") {
+      return res.redirect("/?newsletter=error&reason=invalid-token");
+    }
+
+    const result = await storage.confirmNewsletterSubscription(token);
+
+    if (!result.success) {
+      logger.warn("Newsletter confirmation failed", { error: result.error });
+      return res.redirect(`/?newsletter=error&reason=${encodeURIComponent(result.error || "unknown")}`);
+    }
+
+    logger.info("Newsletter subscription confirmed", { email: result.email });
+    return res.redirect("/?newsletter=confirmed");
+  } catch (error) {
+    logger.error("Newsletter confirmation error", undefined, error);
+    return res.redirect("/?newsletter=error&reason=server-error");
+  }
+});
+
+// Newsletter unsubscribe endpoint
+app.get("/api/newsletter/unsubscribe", async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email || typeof email !== "string") {
+      return res.redirect("/?newsletter=error&reason=invalid-email");
+    }
+
+    const success = await storage.unsubscribeNewsletter(email);
+
+    if (success) {
+      logger.info("Newsletter unsubscription", { email });
+      return res.redirect("/?newsletter=unsubscribed");
+    } else {
+      return res.redirect("/?newsletter=error&reason=unsubscribe-failed");
+    }
+  } catch (error) {
+    logger.error("Newsletter unsubscribe error", undefined, error);
+    return res.redirect("/?newsletter=error&reason=server-error");
+  }
+});
+
+// Weekly newsletter sending endpoint (triggered by cron)
+app.post("/api/newsletter/send-weekly", async (req, res) => {
+  try {
+    // Verify cron secret
+    const authHeader = req.headers.authorization;
+    const providedSecret = authHeader?.replace("Bearer ", "") || req.query.secret;
+
+    if (providedSecret !== CRON_SECRET) {
+      logger.warn("Unauthorized newsletter send attempt");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    logger.info("Starting weekly newsletter send");
+    const result = await newsletterService.sendWeeklyNewsletter();
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error,
+      });
+    }
+
+    return res.json({
+      success: true,
+      sent: result.sent,
+      failed: result.failed,
+      totalSubscribers: result.totalSubscribers,
+      articlesCount: result.articlesCount,
+    });
+  } catch (error) {
+    logger.error("Newsletter send error", undefined, error);
+    return res.status(500).json({ error: "Failed to send newsletter" });
+  }
+});
+
+// Newsletter preview endpoint (admin only)
+app.get("/api/newsletter/preview", requireAuth, async (_req, res) => {
+  try {
+    const preview = await newsletterService.previewNewsletter();
+    return res.json(preview);
+  } catch (error) {
+    logger.error("Newsletter preview error", undefined, error);
+    return res.status(500).json({ error: "Failed to generate preview" });
   }
 });
 

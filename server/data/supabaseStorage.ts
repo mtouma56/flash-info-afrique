@@ -1,6 +1,7 @@
 // Supabase storage service - replaces JSON file storage
 import { supabaseAdmin } from "../lib/supabase";
 import { withRetry } from "../lib/supabaseHelpers";
+import { nanoid } from "nanoid";
 import type {
   Article,
   Category,
@@ -997,27 +998,121 @@ export async function updateAdminUser(
 
 // ============ NEWSLETTER ============
 
-export async function subscribeNewsletter(email: string): Promise<boolean> {
+/**
+ * Subscribe an email to the newsletter
+ * Generates a confirmation token and sets expiration (48h)
+ * Returns the confirmation token for sending confirmation email
+ */
+export async function subscribeNewsletter(email: string): Promise<{ success: boolean; token?: string; alreadyConfirmed?: boolean }> {
+  const normalizedEmail = email.toLowerCase().trim();
+  const confirmationToken = nanoid(32);
+  const tokenExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+
+  // Check if already exists
+  const { data: existing } = await supabaseAdmin
+    .from("newsletter_subscribers")
+    .select("id, confirmed_at, unsubscribed_at")
+    .eq("email", normalizedEmail)
+    .single();
+
+  if (existing) {
+    // Already confirmed and active
+    if (existing.confirmed_at && !existing.unsubscribed_at) {
+      return { success: false, alreadyConfirmed: true };
+    }
+    
+    // Exists but not confirmed or was unsubscribed - update with new token
+    const { error: updateError } = await supabaseAdmin
+      .from("newsletter_subscribers")
+      .update({
+        confirmation_token: confirmationToken,
+        confirmation_token_expires_at: tokenExpiresAt.toISOString(),
+        unsubscribed_at: null, // Resubscribe if was unsubscribed
+      })
+      .eq("id", existing.id);
+
+    if (updateError) {
+      console.error("Error updating newsletter subscriber:", updateError);
+      throw new Error("Failed to update newsletter subscription");
+    }
+
+    return { success: true, token: confirmationToken };
+  }
+
+  // New subscriber
   const { error } = await supabaseAdmin
     .from("newsletter_subscribers")
-    .insert({ email: email.toLowerCase().trim() });
+    .insert({
+      email: normalizedEmail,
+      confirmation_token: confirmationToken,
+      confirmation_token_expires_at: tokenExpiresAt.toISOString(),
+    });
 
   if (error) {
     if (error.code === "23505") {
-      // Unique constraint violation - already subscribed
-      return false;
+      // Unique constraint violation - race condition, already subscribed
+      return { success: false, alreadyConfirmed: true };
     }
     console.error("Error subscribing to newsletter:", error);
     throw new Error("Failed to subscribe to newsletter");
   }
 
-  return true;
+  return { success: true, token: confirmationToken };
 }
 
+/**
+ * Confirm a newsletter subscription using the confirmation token
+ */
+export async function confirmNewsletterSubscription(token: string): Promise<{ success: boolean; email?: string; error?: string }> {
+  // Find subscriber by token
+  const { data: subscriber, error: findError } = await supabaseAdmin
+    .from("newsletter_subscribers")
+    .select("id, email, confirmation_token_expires_at, confirmed_at")
+    .eq("confirmation_token", token)
+    .single();
+
+  if (findError || !subscriber) {
+    return { success: false, error: "Token invalide ou expiré" };
+  }
+
+  // Check if already confirmed
+  if (subscriber.confirmed_at) {
+    return { success: true, email: subscriber.email };
+  }
+
+  // Check token expiration
+  if (subscriber.confirmation_token_expires_at) {
+    const expiresAt = new Date(subscriber.confirmation_token_expires_at);
+    if (expiresAt < new Date()) {
+      return { success: false, error: "Le lien de confirmation a expiré. Veuillez vous réinscrire." };
+    }
+  }
+
+  // Confirm subscription
+  const { error: updateError } = await supabaseAdmin
+    .from("newsletter_subscribers")
+    .update({
+      confirmed_at: new Date().toISOString(),
+      confirmation_token: null, // Clear token after use
+      confirmation_token_expires_at: null,
+    })
+    .eq("id", subscriber.id);
+
+  if (updateError) {
+    console.error("Error confirming newsletter subscription:", updateError);
+    return { success: false, error: "Erreur lors de la confirmation" };
+  }
+
+  return { success: true, email: subscriber.email };
+}
+
+/**
+ * Check if an email is subscribed AND confirmed
+ */
 export async function isNewsletterSubscribed(email: string): Promise<boolean> {
   const { data, error } = await supabaseAdmin
     .from("newsletter_subscribers")
-    .select("id")
+    .select("id, confirmed_at")
     .eq("email", email.toLowerCase().trim())
     .is("unsubscribed_at", null)
     .single();
@@ -1026,9 +1121,57 @@ export async function isNewsletterSubscribed(email: string): Promise<boolean> {
     return false;
   }
 
-  return true;
+  // Must be confirmed to be considered subscribed
+  return data.confirmed_at !== null;
 }
 
+/**
+ * Check if an email exists in the system (pending or confirmed)
+ */
+export async function isNewsletterEmailExists(email: string): Promise<{ exists: boolean; confirmed: boolean }> {
+  const { data, error } = await supabaseAdmin
+    .from("newsletter_subscribers")
+    .select("id, confirmed_at, unsubscribed_at")
+    .eq("email", email.toLowerCase().trim())
+    .single();
+
+  if (error || !data) {
+    return { exists: false, confirmed: false };
+  }
+
+  if (data.unsubscribed_at) {
+    return { exists: false, confirmed: false };
+  }
+
+  return { 
+    exists: true, 
+    confirmed: data.confirmed_at !== null 
+  };
+}
+
+/**
+ * Get all confirmed newsletter subscribers (for sending newsletters)
+ */
+export async function getConfirmedNewsletterSubscribers(): Promise<Array<{ email: string; id: string }>> {
+  const { data, error } = await supabaseAdmin
+    .from("newsletter_subscribers")
+    .select("id, email")
+    .not("confirmed_at", "is", null)
+    .is("unsubscribed_at", null)
+    .order("subscribed_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching confirmed newsletter subscribers:", error);
+    return [];
+  }
+
+  return (data || []).map((s) => ({ email: s.email, id: s.id }));
+}
+
+/**
+ * Get newsletter subscribers (legacy - returns all including pending)
+ * @deprecated Use getConfirmedNewsletterSubscribers instead
+ */
 export async function getNewsletterSubscribers(): Promise<string[]> {
   const { data, error } = await supabaseAdmin
     .from("newsletter_subscribers")
@@ -1042,6 +1185,23 @@ export async function getNewsletterSubscribers(): Promise<string[]> {
   }
 
   return (data || []).map((s) => s.email);
+}
+
+/**
+ * Unsubscribe from newsletter by email
+ */
+export async function unsubscribeNewsletter(email: string): Promise<boolean> {
+  const { error } = await supabaseAdmin
+    .from("newsletter_subscribers")
+    .update({ unsubscribed_at: new Date().toISOString() })
+    .eq("email", email.toLowerCase().trim());
+
+  if (error) {
+    console.error("Error unsubscribing from newsletter:", error);
+    return false;
+  }
+
+  return true;
 }
 
 // ============ STATS ============
@@ -1233,7 +1393,11 @@ export default {
   // Newsletter
   subscribeNewsletter,
   isNewsletterSubscribed,
+  isNewsletterEmailExists,
+  confirmNewsletterSubscription,
   getNewsletterSubscribers,
+  getConfirmedNewsletterSubscribers,
+  unsubscribeNewsletter,
   // Stats
   getDashboardStats,
 };

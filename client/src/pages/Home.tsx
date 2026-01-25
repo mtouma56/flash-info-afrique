@@ -10,8 +10,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useArticles } from "@/hooks/useArticles";
 import { useDossier } from "@/hooks/useDossiers";
-import { AlertCircle, ArrowRight, Loader2, Mail, TrendingUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { AlertCircle, ArrowRight, Loader2, Mail, TrendingUp, CheckCircle, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 
@@ -22,6 +22,52 @@ export default function Home() {
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [displayedCount, setDisplayedCount] = useState(6);
+
+  // Handle newsletter confirmation/unsubscription feedback from URL parameters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const newsletterStatus = urlParams.get("newsletter");
+
+    if (newsletterStatus) {
+      // Clear the URL parameters without reloading
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, "", newUrl);
+
+      switch (newsletterStatus) {
+        case "confirmed":
+          toast.success("Inscription confirmée !", {
+            description: "Vous recevrez notre newsletter chaque vendredi.",
+            duration: 5000,
+            icon: <CheckCircle className="h-5 w-5 text-green-500" />,
+          });
+          break;
+        case "unsubscribed":
+          toast.success("Désinscription réussie", {
+            description: "Vous ne recevrez plus notre newsletter.",
+            duration: 5000,
+          });
+          break;
+        case "error":
+          const reason = urlParams.get("reason") || "unknown";
+          let errorMessage = "Une erreur est survenue.";
+          
+          if (reason.includes("expiré") || reason === "expired") {
+            errorMessage = "Le lien de confirmation a expiré. Veuillez vous réinscrire.";
+          } else if (reason === "invalid-token") {
+            errorMessage = "Lien invalide. Veuillez vous réinscrire.";
+          } else if (reason === "server-error") {
+            errorMessage = "Erreur serveur. Veuillez réessayer plus tard.";
+          }
+          
+          toast.error("Erreur", {
+            description: errorMessage,
+            duration: 5000,
+            icon: <XCircle className="h-5 w-5 text-red-500" />,
+          });
+          break;
+      }
+    }
+  }, []);
 
   // Séparer les articles featured et réguliers
   // Trier par ordre de priorité (champ order), puis par date de publication

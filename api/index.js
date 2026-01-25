@@ -96,6 +96,7 @@ async function withRetry(operation, options = {}) {
 }
 
 // server/data/supabaseStorage.ts
+import { nanoid } from "nanoid";
 async function getArticles() {
   const result = await withRetry(
     async () => await supabaseAdmin.from("articles").select("*").order("published_at", { ascending: false }),
@@ -672,22 +673,93 @@ async function updateAdminUser(userId, updates) {
   };
 }
 async function subscribeNewsletter(email) {
-  const { error } = await supabaseAdmin.from("newsletter_subscribers").insert({ email: email.toLowerCase().trim() });
+  const normalizedEmail = email.toLowerCase().trim();
+  const confirmationToken = nanoid(32);
+  const tokenExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1e3);
+  const { data: existing } = await supabaseAdmin.from("newsletter_subscribers").select("id, confirmed_at, unsubscribed_at").eq("email", normalizedEmail).single();
+  if (existing) {
+    if (existing.confirmed_at && !existing.unsubscribed_at) {
+      return { success: false, alreadyConfirmed: true };
+    }
+    const { error: updateError } = await supabaseAdmin.from("newsletter_subscribers").update({
+      confirmation_token: confirmationToken,
+      confirmation_token_expires_at: tokenExpiresAt.toISOString(),
+      unsubscribed_at: null
+      // Resubscribe if was unsubscribed
+    }).eq("id", existing.id);
+    if (updateError) {
+      console.error("Error updating newsletter subscriber:", updateError);
+      throw new Error("Failed to update newsletter subscription");
+    }
+    return { success: true, token: confirmationToken };
+  }
+  const { error } = await supabaseAdmin.from("newsletter_subscribers").insert({
+    email: normalizedEmail,
+    confirmation_token: confirmationToken,
+    confirmation_token_expires_at: tokenExpiresAt.toISOString()
+  });
   if (error) {
     if (error.code === "23505") {
-      return false;
+      return { success: false, alreadyConfirmed: true };
     }
     console.error("Error subscribing to newsletter:", error);
     throw new Error("Failed to subscribe to newsletter");
   }
-  return true;
+  return { success: true, token: confirmationToken };
+}
+async function confirmNewsletterSubscription(token) {
+  const { data: subscriber, error: findError } = await supabaseAdmin.from("newsletter_subscribers").select("id, email, confirmation_token_expires_at, confirmed_at").eq("confirmation_token", token).single();
+  if (findError || !subscriber) {
+    return { success: false, error: "Token invalide ou expir\xE9" };
+  }
+  if (subscriber.confirmed_at) {
+    return { success: true, email: subscriber.email };
+  }
+  if (subscriber.confirmation_token_expires_at) {
+    const expiresAt = new Date(subscriber.confirmation_token_expires_at);
+    if (expiresAt < /* @__PURE__ */ new Date()) {
+      return { success: false, error: "Le lien de confirmation a expir\xE9. Veuillez vous r\xE9inscrire." };
+    }
+  }
+  const { error: updateError } = await supabaseAdmin.from("newsletter_subscribers").update({
+    confirmed_at: (/* @__PURE__ */ new Date()).toISOString(),
+    confirmation_token: null,
+    // Clear token after use
+    confirmation_token_expires_at: null
+  }).eq("id", subscriber.id);
+  if (updateError) {
+    console.error("Error confirming newsletter subscription:", updateError);
+    return { success: false, error: "Erreur lors de la confirmation" };
+  }
+  return { success: true, email: subscriber.email };
 }
 async function isNewsletterSubscribed(email) {
-  const { data, error } = await supabaseAdmin.from("newsletter_subscribers").select("id").eq("email", email.toLowerCase().trim()).is("unsubscribed_at", null).single();
+  const { data, error } = await supabaseAdmin.from("newsletter_subscribers").select("id, confirmed_at").eq("email", email.toLowerCase().trim()).is("unsubscribed_at", null).single();
   if (error || !data) {
     return false;
   }
-  return true;
+  return data.confirmed_at !== null;
+}
+async function isNewsletterEmailExists(email) {
+  const { data, error } = await supabaseAdmin.from("newsletter_subscribers").select("id, confirmed_at, unsubscribed_at").eq("email", email.toLowerCase().trim()).single();
+  if (error || !data) {
+    return { exists: false, confirmed: false };
+  }
+  if (data.unsubscribed_at) {
+    return { exists: false, confirmed: false };
+  }
+  return {
+    exists: true,
+    confirmed: data.confirmed_at !== null
+  };
+}
+async function getConfirmedNewsletterSubscribers() {
+  const { data, error } = await supabaseAdmin.from("newsletter_subscribers").select("id, email").not("confirmed_at", "is", null).is("unsubscribed_at", null).order("subscribed_at", { ascending: false });
+  if (error) {
+    console.error("Error fetching confirmed newsletter subscribers:", error);
+    return [];
+  }
+  return (data || []).map((s) => ({ email: s.email, id: s.id }));
 }
 async function getNewsletterSubscribers() {
   const { data, error } = await supabaseAdmin.from("newsletter_subscribers").select("email").is("unsubscribed_at", null).order("subscribed_at", { ascending: false });
@@ -696,6 +768,14 @@ async function getNewsletterSubscribers() {
     return [];
   }
   return (data || []).map((s) => s.email);
+}
+async function unsubscribeNewsletter(email) {
+  const { error } = await supabaseAdmin.from("newsletter_subscribers").update({ unsubscribed_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("email", email.toLowerCase().trim());
+  if (error) {
+    console.error("Error unsubscribing from newsletter:", error);
+    return false;
+  }
+  return true;
 }
 async function getDashboardStats() {
   const [articles, dossiers, categories, feeds, rssArticles] = await Promise.all([
@@ -864,7 +944,11 @@ var supabaseStorage_default = {
   // Newsletter
   subscribeNewsletter,
   isNewsletterSubscribed,
+  isNewsletterEmailExists,
+  confirmNewsletterSubscription,
   getNewsletterSubscribers,
+  getConfirmedNewsletterSubscribers,
+  unsubscribeNewsletter,
   // Stats
   getDashboardStats
 };
@@ -1082,7 +1166,7 @@ function requireAuth(req, res, next) {
 
 // server/services/rssService.ts
 import Parser from "rss-parser";
-import { nanoid } from "nanoid";
+import { nanoid as nanoid2 } from "nanoid";
 var parser = new Parser({
   timeout: 15e3,
   headers: {
@@ -1112,7 +1196,7 @@ async function fetchRSSFeed(feed) {
       const article = parseRSSItem(item, feed);
       if (shouldIncludeArticle(article, feed.filters)) {
         articles.push({
-          id: nanoid(),
+          id: nanoid2(),
           feedId: feed.id,
           feedName: feed.name,
           title: article.title,
@@ -1316,7 +1400,7 @@ var GEOGRAPHIC_KEYWORDS = [
   { term: "cotonou", score: 8 },
   { term: "guin\xE9e-bissau", score: 8 }
 ];
-var VALID_CATEGORIES = new Set([
+var VALID_CATEGORIES = /* @__PURE__ */ new Set([
   "banque-finance",
   "regulation-conformite",
   "marches-investissements",
@@ -1324,31 +1408,38 @@ var VALID_CATEGORIES = new Set([
   "actualite"
 ]);
 var CATEGORY_MAPPING = {
+  // Finance variants
   "finance": "banque-finance",
   "banque": "banque-finance",
   "banque-finance": "banque-finance",
+  // Actualités variants
   "actualit\xE9s": "actualite",
   "actualites": "actualite",
   "actualit\xE9": "actualite",
   "actualite": "actualite",
   "news": "actualite",
+  // Économie variants
   "\xE9conomie": "analyses-decryptages",
   "economie": "analyses-decryptages",
   "economy": "analyses-decryptages",
+  // Régulation variants
   "r\xE9gulation": "regulation-conformite",
   "regulation": "regulation-conformite",
   "conformit\xE9": "regulation-conformite",
   "conformite": "regulation-conformite",
   "regulation-conformite": "regulation-conformite",
+  // Marchés variants
   "march\xE9s": "marches-investissements",
   "marches": "marches-investissements",
   "investissement": "marches-investissements",
   "investissements": "marches-investissements",
   "marches-investissements": "marches-investissements",
+  // Analyses variants
   "analyses": "analyses-decryptages",
   "d\xE9cryptages": "analyses-decryptages",
   "decryptages": "analyses-decryptages",
   "analyses-decryptages": "analyses-decryptages",
+  // Political/general variants
   "politique": "analyses-decryptages",
   "technologie": "analyses-decryptages"
 };
@@ -1357,11 +1448,11 @@ function validateAndMapCategory(category) {
   if (!category) {
     return DEFAULT_CATEGORY;
   }
-  var normalized = category.toLowerCase().trim();
+  const normalized = category.toLowerCase().trim();
   if (VALID_CATEGORIES.has(normalized)) {
     return normalized;
   }
-  var mapped = CATEGORY_MAPPING[normalized];
+  const mapped = CATEGORY_MAPPING[normalized];
   if (mapped) {
     return mapped;
   }
@@ -1427,6 +1518,16 @@ function extractImageUrl(item) {
   }
   return void 0;
 }
+function getDefaultImageForCategory(category) {
+  const defaultImages = {
+    "banque-finance": "/default-banque-finance.svg",
+    "regulation-conformite": "/default-regulation-conformite.svg",
+    "marches-investissements": "/default-marches-investissements.svg",
+    "analyses-decryptages": "/default-analyses-decryptages.svg",
+    "actualite": "/default-actualite.svg"
+  };
+  return defaultImages[category] || "/default-actualite.svg";
+}
 function cleanHTML2(html) {
   return html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, " ").trim();
 }
@@ -1485,6 +1586,7 @@ async function scrapeRSSSource(source) {
           status = "draft";
         }
         const publishedAt = item.isoDate || item.pubDate || (/* @__PURE__ */ new Date()).toISOString();
+        const finalImageUrl = imageUrl || getDefaultImageForCategory(category);
         const { error } = await supabaseAdmin.from("articles").insert({
           id: `rss-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           title: item.title || "Sans titre",
@@ -1500,7 +1602,7 @@ async function scrapeRSSSource(source) {
           source_url: item.link,
           published_at: publishedAt,
           is_featured: false,
-          image_url: imageUrl || null,
+          image_url: finalImageUrl,
           status,
           relevance_score: relevanceScore,
           auto_published: status === "published"
@@ -1628,6 +1730,414 @@ var rssAutoService_default = {
   generateSlug: generateSlug2,
   scrapeRSSSource,
   scrapeAllSources
+};
+
+// server/services/emailService.ts
+import { Resend } from "resend";
+var resendApiKey = process.env.RESEND_API_KEY;
+var fromEmail = process.env.RESEND_FROM_EMAIL || "Flash Info Afrique <newsletter@flashinfoafrique.com>";
+var siteUrl = process.env.SITE_URL || "https://flashinfoafrique.com";
+var resend = resendApiKey ? new Resend(resendApiKey) : null;
+function isEmailServiceConfigured() {
+  return resend !== null;
+}
+async function sendConfirmationEmail(email, confirmationToken) {
+  if (!resend) {
+    logger_default.warn("Email service not configured - skipping confirmation email", { email });
+    return false;
+  }
+  const confirmationUrl = `${siteUrl}/api/newsletter/confirm?token=${confirmationToken}`;
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirmez votre inscription - Flash Info Afrique</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%); border-radius: 12px 12px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Flash Info Afrique</h1>
+              <p style="margin: 10px 0 0; color: #E0E7FF; font-size: 14px;">L'actualit\xE9 \xE9conomique et financi\xE8re de la zone UEMOA</p>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; color: #1E3A8A; font-size: 24px;">Confirmez votre inscription</h2>
+              <p style="margin: 0 0 20px; color: #4B5563; font-size: 16px; line-height: 1.6;">
+                Bonjour,
+              </p>
+              <p style="margin: 0 0 30px; color: #4B5563; font-size: 16px; line-height: 1.6;">
+                Merci de votre int\xE9r\xEAt pour notre newsletter hebdomadaire ! Pour confirmer votre inscription et commencer \xE0 recevoir nos actualit\xE9s chaque vendredi, veuillez cliquer sur le bouton ci-dessous :
+              </p>
+              
+              <!-- CTA Button -->
+              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td align="center" style="padding: 10px 0 30px;">
+                    <a href="${confirmationUrl}" style="display: inline-block; padding: 16px 40px; background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%); color: #ffffff; text-decoration: none; font-size: 16px; font-weight: bold; border-radius: 8px;">
+                      Confirmer mon inscription
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="margin: 0 0 20px; color: #6B7280; font-size: 14px; line-height: 1.6;">
+                Si le bouton ne fonctionne pas, copiez et collez ce lien dans votre navigateur :
+              </p>
+              <p style="margin: 0 0 30px; color: #3B82F6; font-size: 14px; word-break: break-all;">
+                <a href="${confirmationUrl}" style="color: #3B82F6;">${confirmationUrl}</a>
+              </p>
+              
+              <p style="margin: 0; color: #9CA3AF; font-size: 13px; line-height: 1.6;">
+                Ce lien expire dans 48 heures. Si vous n'avez pas demand\xE9 cette inscription, vous pouvez ignorer cet email.
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 30px 40px; background-color: #F9FAFB; border-radius: 0 0 12px 12px; border-top: 1px solid #E5E7EB;">
+              <p style="margin: 0 0 10px; color: #6B7280; font-size: 13px; text-align: center;">
+                Flash Info Afrique - Votre source d'information \xE9conomique et financi\xE8re
+              </p>
+              <p style="margin: 0; color: #9CA3AF; font-size: 12px; text-align: center;">
+                <a href="${siteUrl}" style="color: #3B82F6; text-decoration: none;">flashinfoafrique.com</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+  const textContent = `
+Confirmez votre inscription \xE0 la newsletter Flash Info Afrique
+
+Bonjour,
+
+Merci de votre int\xE9r\xEAt pour notre newsletter hebdomadaire ! Pour confirmer votre inscription et commencer \xE0 recevoir nos actualit\xE9s chaque vendredi, veuillez cliquer sur le lien ci-dessous :
+
+${confirmationUrl}
+
+Ce lien expire dans 48 heures. Si vous n'avez pas demand\xE9 cette inscription, vous pouvez ignorer cet email.
+
+---
+Flash Info Afrique
+L'actualit\xE9 \xE9conomique et financi\xE8re de la zone UEMOA
+${siteUrl}
+`;
+  try {
+    const { error } = await resend.emails.send({
+      from: fromEmail,
+      to: email,
+      subject: "Confirmez votre inscription \xE0 la newsletter Flash Info Afrique",
+      html: htmlContent,
+      text: textContent
+    });
+    if (error) {
+      logger_default.error("Failed to send confirmation email", { email, error });
+      return false;
+    }
+    logger_default.info("Confirmation email sent", { email });
+    return true;
+  } catch (error) {
+    logger_default.error("Error sending confirmation email", { email }, error);
+    return false;
+  }
+}
+async function sendWeeklyNewsletter(email, articles, unsubscribeToken) {
+  if (!resend) {
+    logger_default.warn("Email service not configured - skipping newsletter", { email });
+    return false;
+  }
+  const unsubscribeUrl = unsubscribeToken ? `${siteUrl}/api/newsletter/unsubscribe?token=${unsubscribeToken}` : `${siteUrl}`;
+  const articlesHtml = articles.map((article) => `
+    <tr>
+      <td style="padding: 20px 0; border-bottom: 1px solid #E5E7EB;">
+        <table role="presentation" style="width: 100%; border-collapse: collapse;">
+          <tr>
+            ${article.imageUrl ? `
+            <td style="width: 120px; vertical-align: top; padding-right: 20px;">
+              <img src="${article.imageUrl}" alt="" style="width: 120px; height: 80px; object-fit: cover; border-radius: 8px;" />
+            </td>
+            ` : ""}
+            <td style="vertical-align: top;">
+              ${article.category ? `<span style="display: inline-block; padding: 4px 12px; background-color: #E0E7FF; color: #1E3A8A; font-size: 12px; font-weight: 600; border-radius: 20px; margin-bottom: 8px;">${article.category}</span>` : ""}
+              <h3 style="margin: 0 0 8px; font-size: 18px;">
+                <a href="${siteUrl}/article/${article.slug}" style="color: #1E3A8A; text-decoration: none;">${article.title}</a>
+              </h3>
+              <p style="margin: 0; color: #6B7280; font-size: 14px; line-height: 1.5;">${article.excerpt || ""}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  `).join("");
+  const today = /* @__PURE__ */ new Date();
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - 7);
+  const dateRange = `${weekStart.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} - ${today.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`;
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Newsletter Flash Info Afrique</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%); border-radius: 12px 12px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Flash Info Afrique</h1>
+              <p style="margin: 10px 0 0; color: #E0E7FF; font-size: 14px;">Newsletter Hebdomadaire</p>
+              <p style="margin: 10px 0 0; color: #ffffff; font-size: 12px;">${dateRange}</p>
+            </td>
+          </tr>
+          
+          <!-- Intro -->
+          <tr>
+            <td style="padding: 30px 40px 20px;">
+              <p style="margin: 0; color: #4B5563; font-size: 16px; line-height: 1.6;">
+                Bonjour,
+              </p>
+              <p style="margin: 15px 0 0; color: #4B5563; font-size: 16px; line-height: 1.6;">
+                Voici les ${articles.length} article${articles.length > 1 ? "s" : ""} marquant${articles.length > 1 ? "s" : ""} de la semaine dans l'actualit\xE9 \xE9conomique et financi\xE8re de la zone UEMOA :
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Articles -->
+          <tr>
+            <td style="padding: 0 40px;">
+              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                ${articlesHtml}
+              </table>
+            </td>
+          </tr>
+          
+          <!-- CTA -->
+          <tr>
+            <td align="center" style="padding: 30px 40px;">
+              <a href="${siteUrl}" style="display: inline-block; padding: 14px 30px; background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: bold; border-radius: 8px;">
+                Voir tous les articles
+              </a>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 30px 40px; background-color: #F9FAFB; border-radius: 0 0 12px 12px; border-top: 1px solid #E5E7EB;">
+              <p style="margin: 0 0 10px; color: #6B7280; font-size: 13px; text-align: center;">
+                Flash Info Afrique - Votre source d'information \xE9conomique et financi\xE8re
+              </p>
+              <p style="margin: 0 0 15px; color: #9CA3AF; font-size: 12px; text-align: center;">
+                <a href="${siteUrl}" style="color: #3B82F6; text-decoration: none;">flashinfoafrique.com</a>
+              </p>
+              <p style="margin: 0; color: #9CA3AF; font-size: 11px; text-align: center;">
+                <a href="${unsubscribeUrl}" style="color: #9CA3AF; text-decoration: underline;">Se d\xE9sinscrire de la newsletter</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+  const articlesList = articles.map((a) => `- ${a.title}
+  ${siteUrl}/article/${a.slug}`).join("\n\n");
+  const textContent = `
+Newsletter Flash Info Afrique - ${dateRange}
+
+Bonjour,
+
+Voici les ${articles.length} article${articles.length > 1 ? "s" : ""} marquant${articles.length > 1 ? "s" : ""} de la semaine :
+
+${articlesList}
+
+---
+Voir tous les articles : ${siteUrl}
+
+Flash Info Afrique
+L'actualit\xE9 \xE9conomique et financi\xE8re de la zone UEMOA
+
+Se d\xE9sinscrire : ${unsubscribeUrl}
+`;
+  try {
+    const { error } = await resend.emails.send({
+      from: fromEmail,
+      to: email,
+      subject: `Newsletter Flash Info Afrique - ${articles.length} article${articles.length > 1 ? "s" : ""} cette semaine`,
+      html: htmlContent,
+      text: textContent
+    });
+    if (error) {
+      logger_default.error("Failed to send newsletter", { email, error });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger_default.error("Error sending newsletter", { email }, error);
+    return false;
+  }
+}
+async function sendBatchNewsletters(subscribers, articles) {
+  let sent = 0;
+  let failed = 0;
+  for (const subscriber of subscribers) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const success = await sendWeeklyNewsletter(subscriber.email, articles, subscriber.unsubscribeToken);
+    if (success) {
+      sent++;
+    } else {
+      failed++;
+    }
+  }
+  logger_default.info("Batch newsletter sending completed", { sent, failed, total: subscribers.length });
+  return { sent, failed };
+}
+var emailService_default = {
+  isEmailServiceConfigured,
+  sendConfirmationEmail,
+  sendWeeklyNewsletter,
+  sendBatchNewsletters
+};
+
+// server/services/newsletterService.ts
+async function getRecentArticles(days = 7) {
+  const articles = await supabaseStorage_default.getArticles();
+  const cutoffDate = /* @__PURE__ */ new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+  return articles.filter((article) => {
+    if (article.status !== "published") return false;
+    const publishedAt = new Date(article.publishedAt);
+    return publishedAt >= cutoffDate;
+  }).sort((a, b) => {
+    if (a.isFeatured && !b.isFeatured) return -1;
+    if (!a.isFeatured && b.isFeatured) return 1;
+    return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+  }).slice(0, 10);
+}
+async function getCategoryName(categorySlug) {
+  const categories = await supabaseStorage_default.getCategories();
+  const category = categories.find((c) => c.slug === categorySlug || c.id === categorySlug);
+  return category?.name;
+}
+async function sendWeeklyNewsletter2() {
+  try {
+    if (!emailService_default.isEmailServiceConfigured()) {
+      logger_default.warn("Email service not configured - cannot send newsletter");
+      return {
+        success: false,
+        sent: 0,
+        failed: 0,
+        totalSubscribers: 0,
+        articlesCount: 0,
+        error: "Email service not configured"
+      };
+    }
+    const articles = await getRecentArticles(7);
+    if (articles.length === 0) {
+      logger_default.info("No articles to send in newsletter this week");
+      return {
+        success: true,
+        sent: 0,
+        failed: 0,
+        totalSubscribers: 0,
+        articlesCount: 0,
+        error: "No articles published this week"
+      };
+    }
+    const subscribers = await supabaseStorage_default.getConfirmedNewsletterSubscribers();
+    if (subscribers.length === 0) {
+      logger_default.info("No confirmed subscribers to send newsletter to");
+      return {
+        success: true,
+        sent: 0,
+        failed: 0,
+        totalSubscribers: 0,
+        articlesCount: articles.length,
+        error: "No confirmed subscribers"
+      };
+    }
+    const newsletterArticles = await Promise.all(
+      articles.map(async (article) => ({
+        title: article.title,
+        excerpt: article.excerpt || "",
+        slug: article.slug,
+        category: article.category ? await getCategoryName(article.category) : void 0,
+        imageUrl: article.imageUrl,
+        publishedAt: article.publishedAt
+      }))
+    );
+    const subscribersWithTokens = subscribers.map((sub) => ({
+      email: sub.email,
+      unsubscribeToken: void 0
+      // Could generate per-subscriber tokens for unsubscribe
+    }));
+    const result = await emailService_default.sendBatchNewsletters(subscribersWithTokens, newsletterArticles);
+    logger_default.info("Weekly newsletter sending completed", {
+      sent: result.sent,
+      failed: result.failed,
+      totalSubscribers: subscribers.length,
+      articlesCount: articles.length
+    });
+    return {
+      success: true,
+      sent: result.sent,
+      failed: result.failed,
+      totalSubscribers: subscribers.length,
+      articlesCount: articles.length
+    };
+  } catch (error) {
+    logger_default.error("Error sending weekly newsletter", void 0, error);
+    return {
+      success: false,
+      sent: 0,
+      failed: 0,
+      totalSubscribers: 0,
+      articlesCount: 0,
+      error: error instanceof Error ? error.message : "Unknown error"
+    };
+  }
+}
+async function previewNewsletter() {
+  const articles = await getRecentArticles(7);
+  const subscribers = await supabaseStorage_default.getConfirmedNewsletterSubscribers();
+  const newsletterArticles = await Promise.all(
+    articles.map(async (article) => ({
+      title: article.title,
+      excerpt: article.excerpt || "",
+      slug: article.slug,
+      category: article.category ? await getCategoryName(article.category) : void 0,
+      publishedAt: article.publishedAt
+    }))
+  );
+  return {
+    articles: newsletterArticles,
+    subscriberCount: subscribers.length
+  };
+}
+var newsletterService_default = {
+  sendWeeklyNewsletter: sendWeeklyNewsletter2,
+  previewNewsletter
 };
 
 // api/_index.ts
@@ -1794,19 +2304,100 @@ app.post("/api/newsletter/subscribe", newsletterLimiter, async (req, res) => {
     if (!isValidEmail(trimmedEmail)) {
       return res.status(400).json({ error: "L'adresse email n'est pas valide." });
     }
-    const isSubscribed = await supabaseStorage_default.isNewsletterSubscribed(trimmedEmail);
-    if (isSubscribed) {
-      return res.status(409).json({ error: "Cette adresse email est d\xE9j\xE0 inscrite." });
+    const result = await supabaseStorage_default.subscribeNewsletter(trimmedEmail);
+    if (!result.success) {
+      if (result.alreadyConfirmed) {
+        return res.status(409).json({ error: "Cette adresse email est d\xE9j\xE0 inscrite." });
+      }
+      return res.status(500).json({ error: "Une erreur est survenue. Veuillez r\xE9essayer." });
     }
-    await supabaseStorage_default.subscribeNewsletter(trimmedEmail);
-    logger_default.info("Newsletter subscription", { email: trimmedEmail });
+    if (result.token) {
+      const emailSent = await emailService_default.sendConfirmationEmail(trimmedEmail, result.token);
+      if (!emailSent) {
+        logger_default.warn("Failed to send confirmation email, but subscription created", { email: trimmedEmail });
+      }
+    }
+    logger_default.info("Newsletter subscription initiated", { email: trimmedEmail });
     return res.status(201).json({
       success: true,
-      message: "Inscription r\xE9ussie ! Vous recevrez notre newsletter chaque vendredi."
+      message: "Un email de confirmation vous a \xE9t\xE9 envoy\xE9. Veuillez v\xE9rifier votre bo\xEEte de r\xE9ception."
     });
   } catch (error) {
     logger_default.error("Newsletter subscription error", void 0, error);
     return res.status(500).json({ error: "Une erreur est survenue. Veuillez r\xE9essayer." });
+  }
+});
+app.get("/api/newsletter/confirm", async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token || typeof token !== "string") {
+      return res.redirect("/?newsletter=error&reason=invalid-token");
+    }
+    const result = await supabaseStorage_default.confirmNewsletterSubscription(token);
+    if (!result.success) {
+      logger_default.warn("Newsletter confirmation failed", { error: result.error });
+      return res.redirect(`/?newsletter=error&reason=${encodeURIComponent(result.error || "unknown")}`);
+    }
+    logger_default.info("Newsletter subscription confirmed", { email: result.email });
+    return res.redirect("/?newsletter=confirmed");
+  } catch (error) {
+    logger_default.error("Newsletter confirmation error", void 0, error);
+    return res.redirect("/?newsletter=error&reason=server-error");
+  }
+});
+app.get("/api/newsletter/unsubscribe", async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email || typeof email !== "string") {
+      return res.redirect("/?newsletter=error&reason=invalid-email");
+    }
+    const success = await supabaseStorage_default.unsubscribeNewsletter(email);
+    if (success) {
+      logger_default.info("Newsletter unsubscription", { email });
+      return res.redirect("/?newsletter=unsubscribed");
+    } else {
+      return res.redirect("/?newsletter=error&reason=unsubscribe-failed");
+    }
+  } catch (error) {
+    logger_default.error("Newsletter unsubscribe error", void 0, error);
+    return res.redirect("/?newsletter=error&reason=server-error");
+  }
+});
+app.post("/api/newsletter/send-weekly", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const providedSecret = authHeader?.replace("Bearer ", "") || req.query.secret;
+    if (providedSecret !== CRON_SECRET) {
+      logger_default.warn("Unauthorized newsletter send attempt");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    logger_default.info("Starting weekly newsletter send");
+    const result = await newsletterService_default.sendWeeklyNewsletter();
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error
+      });
+    }
+    return res.json({
+      success: true,
+      sent: result.sent,
+      failed: result.failed,
+      totalSubscribers: result.totalSubscribers,
+      articlesCount: result.articlesCount
+    });
+  } catch (error) {
+    logger_default.error("Newsletter send error", void 0, error);
+    return res.status(500).json({ error: "Failed to send newsletter" });
+  }
+});
+app.get("/api/newsletter/preview", requireAuth, async (_req, res) => {
+  try {
+    const preview = await newsletterService_default.previewNewsletter();
+    return res.json(preview);
+  } catch (error) {
+    logger_default.error("Newsletter preview error", void 0, error);
+    return res.status(500).json({ error: "Failed to generate preview" });
   }
 });
 app.get("/api/articles", async (_req, res) => {
