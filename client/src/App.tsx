@@ -5,6 +5,7 @@ import { lazy, Suspense } from "react";
 import { HelmetProvider } from "react-helmet-async";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import ScrollToTop from "./components/ScrollToTop";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ArticlesProvider } from "./contexts/ArticlesContext";
@@ -46,6 +47,7 @@ function PageLoader() {
 function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
+      <ScrollToTop />
       <Switch>
         {/* Public routes */}
         <Route path="/" component={Home} />
