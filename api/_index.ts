@@ -926,28 +926,52 @@ app.get("/api/cron/health", async (_req, res) => {
 // ============ ADMIN AUTH ============
 
 app.post("/api/admin/login", async (req, res) => {
+  const requestId = `login-${Date.now()}`;
+  logger.info(`[LOGIN ${requestId}] Login attempt started`);
+  
   try {
     const { username, password } = req.body;
+    logger.info(`[LOGIN ${requestId}] Received credentials`, { hasUsername: !!username, hasPassword: !!password });
 
     if (!username || !password) {
+      logger.warn(`[LOGIN ${requestId}] Missing credentials`);
       return res.status(400).json({ error: "Identifiants requis" });
     }
 
-    const users = await storage.getAdminUsers();
+    logger.info(`[LOGIN ${requestId}] Fetching admin users...`);
+    let users;
+    try {
+      users = await storage.getAdminUsers();
+      logger.info(`[LOGIN ${requestId}] Found ${users.length} admin users`);
+    } catch (err) {
+      logger.error(`[LOGIN ${requestId}] Error fetching admin users`, undefined, err);
+      throw err;
+    }
     
     if (users.length === 0 && username === "admin" && password === "admin123") {
+      logger.info(`[LOGIN ${requestId}] Creating default admin user...`);
       try {
         await storage.createAdminUser({
           username: "admin",
           password: "admin123",
           email: "admin@flash-info-afrique.local",
         });
+        logger.info(`[LOGIN ${requestId}] Default admin user created`);
       } catch (err) {
-        logger.error("Error creating default admin", undefined, err);
+        logger.error(`[LOGIN ${requestId}] Error creating default admin`, undefined, err);
+        // Continue anyway - user might already exist
       }
     }
 
-    const authResult = await authenticateByUsername(username, password);
+    logger.info(`[LOGIN ${requestId}] Calling authenticateByUsername...`);
+    let authResult;
+    try {
+      authResult = await authenticateByUsername(username, password);
+      logger.info(`[LOGIN ${requestId}] authenticateByUsername completed`, { success: authResult.success });
+    } catch (err) {
+      logger.error(`[LOGIN ${requestId}] Error in authenticateByUsername`, undefined, err);
+      throw err;
+    }
 
     if (!authResult.success) {
       return res.status(401).json({ 
