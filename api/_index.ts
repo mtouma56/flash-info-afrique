@@ -1016,10 +1016,14 @@ app.post("/api/admin/login", async (req, res) => {
       stack: errorStack
     }, error);
     
+    // En production, ne pas exposer les détails de l'erreur pour la sécurité
+    const isDev = process.env.NODE_ENV !== "production";
+    
     return res.status(500).json({ 
       error: "Erreur lors de la connexion",
-      message: errorMessage,
-      code: "SERVER_ERROR"
+      message: isDev ? errorMessage : "Une erreur serveur est survenue",
+      code: "SERVER_ERROR",
+      ...(isDev && errorStack ? { stack: errorStack } : {})
     });
   }
 });
