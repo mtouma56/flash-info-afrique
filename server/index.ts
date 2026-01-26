@@ -891,38 +891,69 @@ async function startServer() {
 
   // Login endpoint
   app.post("/api/admin/login", async (req, res) => {
+    const requestId = `login-${Date.now()}`;
+    logger.info(`[LOGIN ${requestId}] Login attempt started`);
+    
     try {
       const { username, password } = req.body;
 
       if (!username || !password) {
+        logger.warn(`[LOGIN ${requestId}] Missing credentials`, { 
+          hasUsername: !!username, 
+          hasPassword: !!password 
+        });
         return res.status(400).json({ error: "Identifiants requis" });
       }
 
-      // If no users exist, create default admin user
+      logger.info(`[LOGIN ${requestId}] Attempting login for username: ${username}`);
+
+      // Check existing admin users
+      logger.debug(`[LOGIN ${requestId}] Fetching admin users list...`);
       const users = await storage.getAdminUsers();
-      logger.info(`Found ${users.length} admin users in database`);
+      logger.info(`[LOGIN ${requestId}] Found ${users.length} admin users in database`);
       
+      // Log existing usernames (without sensitive data)
+      if (users.length > 0) {
+        const usernames = users.map(u => u.username);
+        logger.debug(`[LOGIN ${requestId}] Existing admin usernames: ${usernames.join(", ")}`);
+        
+        // Check if the username exists
+        const usernameExists = usernames.includes(username);
+        logger.info(`[LOGIN ${requestId}] Username "${username}" exists in admin_profiles: ${usernameExists}`);
+      }
+      
+      // If no users exist, create default admin user
       if (users.length === 0 && username === "admin" && password === "admin123") {
         try {
-          logger.info("Creating default admin user...");
+          logger.info(`[LOGIN ${requestId}] No admin users exist, creating default admin user...`);
           await storage.createAdminUser({
             username: "admin",
             password: "admin123",
             email: "admin@flash-info-afrique.local",
           });
-          logger.info("Default admin user created successfully");
+          logger.info(`[LOGIN ${requestId}] Default admin user created successfully`);
         } catch (err) {
-          logger.error("Error creating default admin", undefined, err);
+          logger.error(`[LOGIN ${requestId}] Error creating default admin`, undefined, err);
           // Continue to try authentication - the user might already exist in Supabase Auth
         }
       }
 
       // Authenticate with Supabase via username
+      logger.info(`[LOGIN ${requestId}] Starting authentication for: ${username}`);
       const authResult = await authenticateByUsername(username, password);
 
-      if (!authResult) {
-        return res.status(401).json({ error: "Identifiants incorrects" });
+      if (!authResult.success) {
+        logger.warn(`[LOGIN ${requestId}] Authentication FAILED for username: ${username}`, {
+          errorCode: authResult.errorCode,
+          errorMessage: authResult.errorMessage
+        });
+        return res.status(401).json({ 
+          error: authResult.errorMessage || "Identifiants incorrects",
+          code: authResult.errorCode
+        });
       }
+
+      logger.info(`[LOGIN ${requestId}] Authentication SUCCESS for: ${username} (role: ${authResult.user!.role})`);
 
       // Return session for client to use
       return res.json({
@@ -932,15 +963,15 @@ async function startServer() {
           refresh_token: authResult.refreshToken,
         },
         user: {
-          id: authResult.user.userId,
-          username: authResult.user.username,
-          role: authResult.user.role,
-          email: authResult.user.email,
+          id: authResult.user!.userId,
+          username: authResult.user!.username,
+          role: authResult.user!.role,
+          email: authResult.user!.email,
         },
       });
     } catch (error) {
-      logger.error("Login error", undefined, error);
-      return res.status(500).json({ error: "Erreur lors de la connexion" });
+      logger.error(`[LOGIN ${requestId}] Unexpected login error`, undefined, error);
+      return res.status(500).json({ error: "Erreur lors de la connexion", code: "UNKNOWN_ERROR" });
     }
   });
 
@@ -960,6 +991,86 @@ async function startServer() {
     } catch (error) {
       logger.error("Get current user error", undefined, error);
       return res.status(500).json({ error: "Erreur lors de la récupération de l'utilisateur" });
+    }
+  });
+
+  // Debug endpoint to check admin users state (for troubleshooting)
+  // This endpoint requires DEBUG_TOKEN env variable to be set
+  // In production, this endpoint is disabled unless DEBUG_TOKEN is explicitly configured
+  app.get("/api/admin/debug/users", async (req, res) => {
+    const debugToken = req.headers["x-debug-token"];
+    const expectedToken = process.env.DEBUG_TOKEN;
+    
+    // Disable in production if no DEBUG_TOKEN is set
+    if (!expectedToken) {
+      return res.status(404).json({ error: "Endpoint non disponible" });
+    }
+    
+    if (debugToken !== expectedToken) {
+      logger.warn("[DEBUG] Unauthorized debug endpoint access attempt");
+      return res.status(403).json({ error: "Accès non autorisé" });
+    }
+    
+    logger.info("[DEBUG] Starting admin users diagnostic...");
+    
+    try {
+      // 1. Get all admin profiles from database
+      const adminProfiles = await storage.getAdminUsers();
+      logger.info(`[DEBUG] Found ${adminProfiles.length} admin profiles in admin_profiles table`);
+      
+      // 2. Check each profile's sync status with auth.users
+      const diagnosticResults = await Promise.all(
+        adminProfiles.map(async (profile) => {
+          try {
+            const { data: authData, error: authError } = await supabaseAdmin.auth.admin.getUserById(profile.id);
+            
+            return {
+              username: profile.username,
+              profileId: profile.id,
+              role: profile.role,
+              emailMasked: profile.email ? `${profile.email.substring(0, 3)}***@${profile.email.split("@")[1] || "?"}` : "N/A",
+              authUserExists: !!authData?.user,
+              authUserEmail: authData?.user?.email ? `${authData.user.email.substring(0, 3)}***@${authData.user.email.split("@")[1] || "?"}` : "N/A",
+              authError: authError?.message || null,
+              syncStatus: authData?.user ? "OK" : "DESYNC",
+              createdAt: profile.createdAt
+            };
+          } catch (err) {
+            return {
+              username: profile.username,
+              profileId: profile.id,
+              role: profile.role,
+              syncStatus: "ERROR",
+              error: err instanceof Error ? err.message : "Unknown error"
+            };
+          }
+        })
+      );
+      
+      // 3. Summary
+      const syncedCount = diagnosticResults.filter(r => r.syncStatus === "OK").length;
+      const desyncedCount = diagnosticResults.filter(r => r.syncStatus === "DESYNC").length;
+      const errorCount = diagnosticResults.filter(r => r.syncStatus === "ERROR").length;
+      
+      logger.info(`[DEBUG] Diagnostic complete: ${syncedCount} synced, ${desyncedCount} desynced, ${errorCount} errors`);
+      
+      return res.json({
+        timestamp: new Date().toISOString(),
+        summary: {
+          totalProfiles: adminProfiles.length,
+          synced: syncedCount,
+          desynced: desyncedCount,
+          errors: errorCount
+        },
+        users: diagnosticResults,
+        note: "Si un utilisateur a syncStatus 'DESYNC', son compte auth.users n'existe pas ou a un ID différent"
+      });
+    } catch (error) {
+      logger.error("[DEBUG] Diagnostic error", undefined, error);
+      return res.status(500).json({ 
+        error: "Erreur lors du diagnostic",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 

@@ -1114,21 +1114,60 @@ async function verifyToken(token) {
   }
 }
 async function authenticateUser(email, password) {
+  logger_default.info(`[AUTH] Attempting authentication for email: ${email}`);
   try {
+    logger_default.debug(`[AUTH] Calling Supabase signInWithPassword for: ${email}`);
     const { data, error } = await supabaseAdmin.auth.signInWithPassword({
       email,
       password
     });
-    if (error || !data.user || !data.session) {
-      logger_default.warn(`Supabase auth failed for email: ${email}`, { error: error?.message });
-      return null;
+    if (error) {
+      logger_default.warn(`[AUTH] Supabase signInWithPassword failed for email: ${email}`, {
+        error: error.message,
+        errorCode: error.status,
+        errorName: error.name
+      });
+      return {
+        success: false,
+        errorCode: "INVALID_PASSWORD",
+        errorMessage: "Mot de passe incorrect"
+      };
     }
+    if (!data.user) {
+      logger_default.warn(`[AUTH] No user returned from Supabase for email: ${email}`);
+      return {
+        success: false,
+        errorCode: "AUTH_USER_MISSING",
+        errorMessage: "Utilisateur non trouv\xE9 dans le syst\xE8me d'authentification"
+      };
+    }
+    if (!data.session) {
+      logger_default.warn(`[AUTH] No session returned from Supabase for email: ${email}`, {
+        userId: data.user.id
+      });
+      return {
+        success: false,
+        errorCode: "SESSION_ERROR",
+        errorMessage: "Erreur lors de la cr\xE9ation de la session"
+      };
+    }
+    logger_default.info(`[AUTH] Supabase auth successful for user ID: ${data.user.id}`);
+    logger_default.debug(`[AUTH] Fetching admin profile for user ID: ${data.user.id}`);
     const adminUser = await supabaseStorage_default.getAdminUserById(data.user.id);
     if (!adminUser) {
-      logger_default.warn(`User exists in auth but no admin profile found for ID: ${data.user.id}`);
-      return null;
+      logger_default.warn(`[AUTH] User exists in Supabase Auth but no admin_profiles entry found`, {
+        userId: data.user.id,
+        email: data.user.email
+      });
+      return {
+        success: false,
+        errorCode: "ADMIN_PROFILE_MISSING",
+        errorMessage: "Profil administrateur non trouv\xE9"
+      };
     }
+    logger_default.info(`[AUTH] Authentication successful for admin: ${adminUser.username} (role: ${adminUser.role})`);
     return {
+      success: true,
       user: {
         userId: data.user.id,
         username: adminUser.username,
@@ -1139,30 +1178,93 @@ async function authenticateUser(email, password) {
       refreshToken: data.session.refresh_token
     };
   } catch (error) {
-    logger_default.error("Error in authenticateUser", void 0, error);
-    return null;
+    logger_default.error("[AUTH] Unexpected error in authenticateUser", { email }, error);
+    return {
+      success: false,
+      errorCode: "UNKNOWN_ERROR",
+      errorMessage: "Erreur inattendue lors de l'authentification"
+    };
   }
 }
 async function authenticateByUsername(username, password) {
+  logger_default.info(`[AUTH] Starting authentication by username: ${username}`);
   try {
+    logger_default.debug(`[AUTH] Step 1: Looking up admin_profiles for username: ${username}`);
     const { data: profile, error: profileError } = await supabaseAdmin.from("admin_profiles").select("id, username, role").eq("username", username).single();
-    if (profileError || !profile) {
-      logger_default.warn(`Admin profile not found for username: ${username}`, { error: profileError?.message });
-      return null;
+    if (profileError) {
+      logger_default.warn(`[AUTH] Step 1 FAILED: Error querying admin_profiles for username: ${username}`, {
+        error: profileError.message,
+        code: profileError.code,
+        details: profileError.details,
+        hint: profileError.hint
+      });
+      return {
+        success: false,
+        errorCode: "USER_NOT_FOUND",
+        errorMessage: "Nom d'utilisateur non trouv\xE9"
+      };
     }
+    if (!profile) {
+      logger_default.warn(`[AUTH] Step 1 FAILED: No admin profile found for username: ${username}`);
+      return {
+        success: false,
+        errorCode: "USER_NOT_FOUND",
+        errorMessage: "Nom d'utilisateur non trouv\xE9"
+      };
+    }
+    logger_default.info(`[AUTH] Step 1 SUCCESS: Found admin profile`, {
+      profileId: profile.id,
+      username: profile.username,
+      role: profile.role
+    });
+    logger_default.debug(`[AUTH] Step 2: Looking up auth.users for profile ID: ${profile.id}`);
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.getUserById(profile.id);
-    if (authError || !authData?.user?.email) {
-      logger_default.warn(`Auth user not found for profile ID: ${profile.id}`, { error: authError?.message });
-      return null;
+    if (authError) {
+      logger_default.warn(`[AUTH] Step 2 FAILED: Error fetching auth user for profile ID: ${profile.id}`, {
+        error: authError.message,
+        code: authError.code,
+        status: authError.status
+      });
+      return {
+        success: false,
+        errorCode: "AUTH_USER_MISSING",
+        errorMessage: "Compte utilisateur non trouv\xE9 dans le syst\xE8me d'authentification"
+      };
     }
+    if (!authData?.user) {
+      logger_default.warn(`[AUTH] Step 2 FAILED: No auth user found for profile ID: ${profile.id}`);
+      return {
+        success: false,
+        errorCode: "AUTH_USER_MISSING",
+        errorMessage: "Compte utilisateur non trouv\xE9 dans le syst\xE8me d'authentification"
+      };
+    }
+    if (!authData.user.email) {
+      logger_default.warn(`[AUTH] Step 2 FAILED: Auth user has no email for profile ID: ${profile.id}`, {
+        userId: authData.user.id
+      });
+      return {
+        success: false,
+        errorCode: "EMAIL_MISSING",
+        errorMessage: "Email non configur\xE9 pour ce compte"
+      };
+    }
+    logger_default.info(`[AUTH] Step 2 SUCCESS: Found auth user with email: ${authData.user.email}`);
+    logger_default.debug(`[AUTH] Step 3: Authenticating with email/password for: ${authData.user.email}`);
     const result = await authenticateUser(authData.user.email, password);
-    if (!result) {
-      logger_default.warn(`Authentication failed for user: ${username} (email: ${authData.user.email})`);
+    if (!result.success) {
+      logger_default.warn(`[AUTH] Step 3 FAILED: Password authentication failed for user: ${username} (email: ${authData.user.email})`);
+      return result;
     }
+    logger_default.info(`[AUTH] Step 3 SUCCESS: Full authentication completed for user: ${username}`);
     return result;
   } catch (error) {
-    logger_default.error("Error in authenticateByUsername", void 0, error);
-    return null;
+    logger_default.error("[AUTH] Unexpected error in authenticateByUsername", { username }, error);
+    return {
+      success: false,
+      errorCode: "UNKNOWN_ERROR",
+      errorMessage: "Erreur inattendue lors de l'authentification"
+    };
   }
 }
 function requireAuth(req, res, next) {

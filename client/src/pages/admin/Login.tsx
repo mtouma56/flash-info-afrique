@@ -40,14 +40,32 @@ export default function AdminLogin() {
     setIsLoading(true);
 
     try {
-      const success = await login(username, password);
-      if (success) {
+      const result = await login(username, password);
+      if (result.success) {
         toast.success("Connexion réussie");
         setLocation("/admin");
       } else {
-        toast.error("Identifiants incorrects");
+        // Afficher un message d'erreur plus spécifique selon le code
+        const errorMessages: Record<string, string> = {
+          USER_NOT_FOUND: "Nom d'utilisateur non reconnu",
+          INVALID_PASSWORD: "Mot de passe incorrect",
+          AUTH_USER_MISSING: "Compte utilisateur introuvable",
+          ADMIN_PROFILE_MISSING: "Profil administrateur non configuré",
+          EMAIL_MISSING: "Configuration du compte incomplète",
+          SESSION_ERROR: "Erreur de session, veuillez réessayer",
+          NETWORK_ERROR: "Impossible de contacter le serveur",
+          UNKNOWN_ERROR: "Une erreur inattendue s'est produite"
+        };
+        
+        const displayMessage = result.errorCode 
+          ? errorMessages[result.errorCode] || result.errorMessage || "Identifiants incorrects"
+          : result.errorMessage || "Identifiants incorrects";
+        
+        toast.error(displayMessage);
+        console.error("[LOGIN] Error:", result.errorCode, result.errorMessage);
       }
     } catch (error) {
+      console.error("[LOGIN] Unexpected error:", error);
       toast.error("Une erreur est survenue");
     } finally {
       setIsLoading(false);

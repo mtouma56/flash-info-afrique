@@ -10,10 +10,27 @@ interface User {
   email: string;
 }
 
+// Types d'erreurs d'authentification (miroir du serveur)
+type AuthErrorCode = 
+  | "USER_NOT_FOUND"
+  | "INVALID_PASSWORD"
+  | "AUTH_USER_MISSING"
+  | "ADMIN_PROFILE_MISSING"
+  | "EMAIL_MISSING"
+  | "SESSION_ERROR"
+  | "NETWORK_ERROR"
+  | "UNKNOWN_ERROR";
+
+interface LoginResult {
+  success: boolean;
+  errorCode?: AuthErrorCode;
+  errorMessage?: string;
+}
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   isLoading: boolean;
   getToken: () => string | null;
@@ -83,8 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string): Promise<LoginResult> => {
     try {
+      console.log("[AUTH] Attempting login for:", username);
+      
       // Use our backend API to authenticate by username
       const response = await fetch("/api/admin/login", {
         method: "POST",
@@ -92,8 +111,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ username, password }),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
-        const data = await response.json();
+        console.log("[AUTH] Login successful for:", username);
 
         // If the backend returns a session, set it in Supabase client
         if (data.session) {
@@ -110,12 +131,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: data.user.email || "",
         });
 
-        return true;
+        return { success: true };
       }
-      return false;
+
+      // Handle error response
+      console.error("[AUTH] Login failed:", data.error, "Code:", data.code);
+      return {
+        success: false,
+        errorCode: data.code as AuthErrorCode || "UNKNOWN_ERROR",
+        errorMessage: data.error || "Identifiants incorrects"
+      };
     } catch (error) {
-      console.error("Login error:", error);
-      return false;
+      console.error("[AUTH] Network or unexpected error:", error);
+      return {
+        success: false,
+        errorCode: "NETWORK_ERROR",
+        errorMessage: "Erreur de connexion au serveur"
+      };
     }
   };
 
