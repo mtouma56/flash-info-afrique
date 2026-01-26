@@ -32,6 +32,10 @@ export default function AdminLogin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:32',message:'handleSubmit entry',data:{username:username.trim(),hasPassword:!!password.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+
     if (!username.trim() || !password.trim()) {
       toast.error("Veuillez remplir tous les champs");
       return;
@@ -40,10 +44,22 @@ export default function AdminLogin() {
     setIsLoading(true);
 
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:43',message:'before login call',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       const result = await login(username, password);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:44',message:'after login call',data:{success:result.success,errorCode:result.errorCode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       if (result.success) {
         toast.success("Connexion réussie");
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:46',message:'before setLocation',data:{target:'/admin'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         setLocation("/admin");
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:46',message:'after setLocation',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
       } else {
         // Afficher un message d'erreur plus spécifique selon le code
         const errorMessages: Record<string, string> = {
@@ -66,6 +82,9 @@ export default function AdminLogin() {
       }
     } catch (error) {
       console.error("[LOGIN] Unexpected error:", error);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:67',message:'handleSubmit catch error',data:{error:error instanceof Error?error.message:String(error),errorName:error instanceof Error?error.name:null,stack:error instanceof Error?error.stack:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       toast.error("Une erreur est survenue");
     } finally {
       setIsLoading(false);

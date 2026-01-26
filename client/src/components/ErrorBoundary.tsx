@@ -24,10 +24,17 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Log error to console in development
-    if (import.meta.env.DEV) {
-      console.error("ErrorBoundary caught an error:", error, errorInfo);
-    }
+    // Always log to console for debugging (works in production too)
+    console.error("[ERROR_BOUNDARY] Caught error:", {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      componentStack: errorInfo.componentStack,
+    });
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ErrorBoundary.tsx:26',message:'ErrorBoundary caught error',data:{errorName:error.name,errorMessage:error.message,errorStack:error.stack,componentStack:errorInfo.componentStack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
     
     // Send error to Sentry in production
     captureError(error, {

@@ -38,6 +38,12 @@ export default function AdminLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pendingRSSCount, setPendingRSSCount] = useState(0);
 
+  // #region agent log
+  if (typeof window !== 'undefined') {
+    fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AdminLayout.tsx:36',message:'AdminLayout render',data:{hasUser:!!user,userId:user?.id,username:user?.username,location},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+  }
+  // #endregion
+
   // Fermer la sidebar sur mobile lors d'un changement de page
   useEffect(() => {
     setSidebarOpen(false);
