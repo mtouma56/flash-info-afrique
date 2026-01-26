@@ -214,12 +214,17 @@ const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map(origin => origin.trim())
   : [];
 
+// Detect environment - Vercel sets VERCEL=1 and VERCEL_ENV
+const isProduction = process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production";
+const isVercel = !!process.env.VERCEL;
+
 // Add default origins based on environment
-const defaultOrigins = process.env.NODE_ENV === "production"
+const defaultOrigins = isProduction || isVercel
   ? [
       "https://flashinfoafrique.com",
       "https://www.flashinfoafrique.com",
       "https://flash-info-afrique.vercel.app",
+      "https://flash-info-afrique-*.vercel.app", // Allow preview deployments
     ]
   : [
       "http://localhost:3000",
@@ -231,21 +236,42 @@ const defaultOrigins = process.env.NODE_ENV === "production"
 
 const allowedOrigins = [...new Set([...corsOrigins, ...defaultOrigins])];
 
+logger.info("CORS configuration", { 
+  isProduction, 
+  isVercel, 
+  allowedOrigins: allowedOrigins.length,
+  env: process.env.VERCEL_ENV || process.env.NODE_ENV 
+});
+
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, Postman, server-to-server)
     if (!origin) {
+      logger.debug("CORS: Allowing request with no origin");
       return callback(null, true);
     }
     
+    // Check exact match first
     if (allowedOrigins.includes(origin)) {
+      logger.debug("CORS: Allowing origin (exact match)", { origin });
       return callback(null, true);
     }
     
-    // Log blocked origins in production for debugging
-    if (process.env.NODE_ENV === "production") {
-      logger.warn("CORS blocked origin", { origin });
+    // Allow Vercel preview deployments (wildcard matching)
+    if (isVercel && origin.match(/^https:\/\/flash-info-afrique-.*\.vercel\.app$/)) {
+      logger.debug("CORS: Allowing Vercel preview deployment", { origin });
+      return callback(null, true);
     }
+    
+    // Log blocked origins for debugging
+    logger.warn("CORS blocked origin", { 
+      origin, 
+      allowedOrigins,
+      isProduction,
+      isVercel,
+      vercelEnv: process.env.VERCEL_ENV,
+      nodeEnv: process.env.NODE_ENV
+    });
     
     return callback(new Error("Not allowed by CORS"), false);
   },
