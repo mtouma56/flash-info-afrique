@@ -1006,8 +1006,16 @@ app.post("/api/admin/login", async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error("Login error", undefined, error);
     const errorMessage = error instanceof Error ? error.message : "Erreur inattendue";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorName = error instanceof Error ? error.name : undefined;
+    
+    logger.error(`[LOGIN ${requestId}] Login error`, { 
+      message: errorMessage,
+      name: errorName,
+      stack: errorStack
+    }, error);
+    
     return res.status(500).json({ 
       error: "Erreur lors de la connexion",
       message: errorMessage,
