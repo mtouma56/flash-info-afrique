@@ -297,6 +297,41 @@ async function startServer() {
     }
   });
 
+  // GET version for Vercel cron job
+  // Vercel cron jobs send GET requests with Authorization: Bearer {CRON_SECRET}
+  app.get("/api/newsletter/send-weekly", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const providedSecret = authHeader?.replace("Bearer ", "") || req.query.secret as string;
+
+      if (providedSecret !== CRON_SECRET) {
+        logger.warn("Unauthorized newsletter send attempt (GET)");
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      logger.info("Starting weekly newsletter send (via cron GET)");
+      const result = await newsletterService.sendWeeklyNewsletter();
+
+      if (!result.success) {
+        return res.status(500).json({
+          success: false,
+          error: result.error,
+        });
+      }
+
+      return res.json({
+        success: true,
+        sent: result.sent,
+        failed: result.failed,
+        totalSubscribers: result.totalSubscribers,
+        articlesCount: result.articlesCount,
+      });
+    } catch (error) {
+      logger.error("Newsletter send error (GET)", undefined, error);
+      return res.status(500).json({ error: "Failed to send newsletter" });
+    }
+  });
+
   // Newsletter preview endpoint (admin only)
   app.get("/api/newsletter/preview", requireAuth, async (_req, res) => {
     try {
@@ -506,10 +541,14 @@ async function startServer() {
     }
   });
 
-  // GET version for manual testing (with secret in query param)
+  // GET version for Vercel cron job and manual testing
+  // Vercel cron jobs send GET requests with Authorization: Bearer {CRON_SECRET}
   app.get("/api/scrape-rss", async (req, res) => {
-    const secret = req.query.secret as string;
-    if (secret !== CRON_SECRET) {
+    const authHeader = req.headers.authorization;
+    const providedSecret = authHeader?.replace("Bearer ", "") || req.query.secret as string;
+    
+    if (providedSecret !== CRON_SECRET) {
+      logger.warn("Unauthorized scrape-rss GET attempt");
       return res.status(401).json({ error: "Unauthorized" });
     }
 
