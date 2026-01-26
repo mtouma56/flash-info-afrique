@@ -21,6 +21,76 @@ const parser = new Parser({
 // Concurrency limit for parallel RSS scraping
 const CONCURRENCY_LIMIT = 3;
 
+// Retry configuration for temporary failures
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  initialDelayMs: 1000,
+  maxDelayMs: 10000,
+  backoffMultiplier: 2,
+};
+
+/**
+ * Check if an error is retryable (temporary network failure, timeout, etc.)
+ */
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    return (
+      message.includes("timeout") ||
+      message.includes("econnreset") ||
+      message.includes("econnrefused") ||
+      message.includes("etimedout") ||
+      message.includes("network") ||
+      message.includes("socket hang up") ||
+      message.includes("fetch failed") ||
+      message.includes("aborted")
+    );
+  }
+  return false;
+}
+
+/**
+ * Execute an async function with retry logic and exponential backoff
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  operationName: string,
+  config = RETRY_CONFIG
+): Promise<T> {
+  let lastError: Error | undefined;
+  
+  for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      // Don't retry if the error is not retryable
+      if (!isRetryableError(error)) {
+        throw lastError;
+      }
+      
+      // Don't retry on last attempt
+      if (attempt === config.maxRetries) {
+        console.error(`[RSS Auto] ${operationName} failed after ${config.maxRetries} attempts: ${lastError.message}`);
+        throw lastError;
+      }
+      
+      // Calculate delay with exponential backoff
+      const delay = Math.min(
+        config.initialDelayMs * Math.pow(config.backoffMultiplier, attempt - 1),
+        config.maxDelayMs
+      );
+      
+      console.warn(`[RSS Auto] ${operationName} failed (attempt ${attempt}/${config.maxRetries}), retrying in ${delay}ms: ${lastError.message}`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError || new Error(`${operationName} failed after ${config.maxRetries} attempts`);
+}
+
 /**
  * Process items in parallel with concurrency control
  */
@@ -400,8 +470,11 @@ export async function scrapeRSSSource(source: RSSSource): Promise<ScrapingResult
   try {
     console.log(`[RSS Auto] Scraping ${source.name}...`);
     
-    // Parse the RSS feed
-    const feed = await parser.parseURL(source.url);
+    // Parse the RSS feed with retry logic for temporary failures
+    const feed = await withRetry(
+      () => parser.parseURL(source.url),
+      `Parsing RSS feed ${source.name}`
+    );
     result.articlesFound = feed.items?.length || 0;
 
     for (const item of feed.items || []) {

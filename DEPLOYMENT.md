@@ -111,6 +111,9 @@ nano .env
 
 | Variable | Description |
 |----------|-------------|
+| `CRON_SECRET` | **OBLIGATOIRE pour Vercel** - Secret pour sécuriser les endpoints cron (générer avec `openssl rand -base64 32`) |
+| `RESEND_API_KEY` | Clé API Resend pour l'envoi d'emails (newsletter) |
+| `RESEND_FROM_EMAIL` | Email expéditeur (format: "Nom <email@domaine.com>") |
 | `VITE_SENTRY_DSN` | DSN Sentry pour error tracking |
 | `VITE_ANALYTICS_ENDPOINT` | URL Umami Analytics |
 | `VITE_ANALYTICS_WEBSITE_ID` | ID site Umami |
@@ -448,6 +451,144 @@ pnpm build
 sudo systemctl restart flash-info-afrique
 ```
 
+## Configuration des Cron Jobs (Vercel)
+
+### Vue d'ensemble
+
+Le projet utilise des cron jobs Vercel pour automatiser deux tâches :
+
+1. **Scraping RSS automatique** : `/api/scrape-rss`
+   - Schedule : `0 */2 * * *` (toutes les 2 heures)
+   - Fonction : Scrape toutes les sources RSS configurées et importe les nouveaux articles
+
+2. **Newsletter hebdomadaire** : `/api/newsletter/send-weekly`
+   - Schedule : `0 8 * * 5` (vendredi à 8h00 UTC)
+   - Fonction : Envoie la newsletter hebdomadaire à tous les abonnés
+
+### Fuseau horaire
+
+**⚠️ Important** : Les schedules cron Vercel utilisent le fuseau horaire **UTC**.
+
+| Schedule | UTC | Paris (CET/CEST) | Dakar (GMT) |
+|----------|-----|------------------|-------------|
+| `0 */2 * * *` (RSS) | Toutes les 2h | Toutes les 2h | Toutes les 2h |
+| `0 8 * * 5` (Newsletter) | Vendredi 8h00 | Vendredi 9h00 (hiver) / 10h00 (été) | Vendredi 8h00 |
+
+**Pourquoi UTC ?**
+- Vercel utilise UTC pour tous les cron jobs
+- Évite les problèmes liés aux changements d'heure (heure d'été/hiver)
+- Standard de l'industrie pour les tâches planifiées
+
+**Ajuster le schedule si nécessaire** :
+- Pour envoyer la newsletter à 9h00 heure de Paris en hiver : `0 8 * * 5`
+- Pour envoyer la newsletter à 9h00 heure de Paris en été : `0 7 * * 5`
+- Pour envoyer à 9h00 heure de Dakar : `0 9 * * 5`
+
+Le schedule actuel (`0 8 * * 5`) est optimisé pour une audience en Afrique de l'Ouest (GMT), où 8h00 UTC correspond à 8h00 heure locale.
+
+### Configuration dans Vercel
+
+#### 1. Configurer CRON_SECRET
+
+**⚠️ CRITIQUE** : Sans cette variable, les cron jobs échoueront avec une erreur 401.
+
+1. Générez un secret sécurisé :
+   ```bash
+   openssl rand -base64 32
+   ```
+
+2. Ajoutez `CRON_SECRET` dans les variables d'environnement Vercel :
+   - Allez dans votre projet Vercel > Settings > Environment Variables
+   - Ajoutez `CRON_SECRET` avec la valeur générée
+   - **Important** : Configurez-la pour **Production**, **Preview**, et **Development**
+
+3. Redéployez votre application pour que la variable soit prise en compte
+
+#### 2. Vérifier la configuration dans vercel.json
+
+Les cron jobs sont configurés dans `vercel.json` :
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/scrape-rss",
+      "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/newsletter/send-weekly",
+      "schedule": "0 8 * * 5"
+    }
+  ]
+}
+```
+
+#### 3. Tester les cron jobs
+
+**Test manuel** (avec authentification) :
+
+```bash
+# Test scraping RSS
+curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
+  https://votre-domaine.vercel.app/api/scrape-rss
+
+# Test newsletter
+curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
+  https://votre-domaine.vercel.app/api/newsletter/send-weekly
+```
+
+**Via Vercel Dashboard** :
+- Allez dans votre projet > Settings > Cron Jobs
+- Vous pouvez déclencher manuellement les cron jobs depuis l'interface
+
+### Dépannage des Cron Jobs
+
+#### Erreur 401 "Unauthorized"
+
+**Cause** : `CRON_SECRET` n'est pas configuré ou ne correspond pas.
+
+**Solution** :
+1. Vérifiez que `CRON_SECRET` est bien configuré dans Vercel (Settings > Environment Variables)
+2. Vérifiez que la valeur correspond à celle dans votre `.env` local
+3. Redéployez l'application après avoir ajouté/modifié la variable
+4. Vérifiez les logs Vercel pour voir les erreurs d'authentification
+
+#### Les cron jobs ne s'exécutent pas
+
+**Vérifications** :
+1. Vérifiez que `vercel.json` contient bien la section `crons`
+2. Vérifiez que les paths correspondent aux endpoints (`/api/scrape-rss`, `/api/newsletter/send-weekly`)
+3. Vérifiez les logs Vercel (Deployments > Logs) pour voir si les cron jobs sont déclenchés
+4. Vérifiez que les schedules sont corrects (format cron)
+
+#### Logs d'avertissement en production
+
+Si vous voyez ce message dans les logs :
+```
+⚠️  CRITICAL: CRON_SECRET is using default value in production!
+```
+
+**Action immédiate** : Configurez `CRON_SECRET` dans Vercel et redéployez.
+
+### Sécurité
+
+- ✅ Les endpoints cron sont protégés par authentification Bearer token
+- ✅ Seul Vercel (avec le bon `CRON_SECRET`) peut déclencher les cron jobs
+- ✅ Les requêtes non authentifiées reçoivent une erreur 401
+- ✅ Le secret est stocké de manière sécurisée dans les variables d'environnement Vercel
+
+### Monitoring
+
+Pour surveiller l'exécution des cron jobs :
+
+1. **Logs Vercel** : Allez dans Deployments > Sélectionnez un déploiement > Logs
+2. **Métriques** : Vérifiez les métriques de performance dans Vercel Analytics
+3. **Logs applicatifs** : Les endpoints loggent automatiquement :
+   - Début et fin d'exécution
+   - Nombre d'articles trouvés/importés
+   - Erreurs éventuelles
+   - Durée d'exécution
+
 ## Checklist de déploiement
 
 ### Avant le déploiement
@@ -455,6 +596,7 @@ sudo systemctl restart flash-info-afrique
 - [ ] Tests passent localement (`pnpm test:run`)
 - [ ] Build réussi (`pnpm build`)
 - [ ] Variables d'environnement configurées
+- [ ] **CRON_SECRET configuré dans Vercel** (Production, Preview, Development)
 - [ ] Migrations Supabase appliquées :
   - [ ] `001_initial_schema.sql`
   - [ ] `20260124_rss_auto_schema.sql` (pour RSS)
@@ -474,8 +616,10 @@ sudo systemctl restart flash-info-afrique
 
 - [ ] Health check (`/api/health`)
 - [ ] Test des fonctionnalités critiques
+- [ ] **Test des cron jobs manuellement** (vérifier l'authentification)
 - [ ] Vérification des erreurs Sentry
 - [ ] Vérification des métriques
+- [ ] Vérification des logs Vercel pour confirmer l'exécution des cron jobs
 
 ### En cas de problème
 
@@ -515,6 +659,18 @@ Vérifiez :
 1. Que toutes les migrations ont été appliquées
 2. Que les colonnes `source_url`, `relevance_score`, `auto_published` existent
 3. Les logs d'erreur dans la réponse de l'endpoint `/api/admin/rss/scrape`
+
+### Les cron jobs ne fonctionnent pas
+
+**Symptômes** : Les cron jobs retournent 401 ou ne s'exécutent pas automatiquement.
+
+**Solutions** :
+1. Vérifiez que `CRON_SECRET` est configuré dans Vercel (Settings > Environment Variables)
+2. Vérifiez que `CRON_SECRET` est identique dans tous les environnements (Production, Preview, Development)
+3. Redéployez l'application après avoir configuré `CRON_SECRET`
+4. Testez manuellement avec curl pour vérifier l'authentification
+5. Vérifiez les logs Vercel pour voir les erreurs exactes
+6. Vérifiez que `vercel.json` contient bien la section `crons` avec les bons paths
 
 ## Support
 

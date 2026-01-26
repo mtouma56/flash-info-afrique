@@ -1421,6 +1421,43 @@ var parser2 = new Parser2({
   }
 });
 var CONCURRENCY_LIMIT = 3;
+var RETRY_CONFIG = {
+  maxRetries: 3,
+  initialDelayMs: 1e3,
+  maxDelayMs: 1e4,
+  backoffMultiplier: 2
+};
+function isRetryableError(error) {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    return message.includes("timeout") || message.includes("econnreset") || message.includes("econnrefused") || message.includes("etimedout") || message.includes("network") || message.includes("socket hang up") || message.includes("fetch failed") || message.includes("aborted");
+  }
+  return false;
+}
+async function withRetry2(fn, operationName, config = RETRY_CONFIG) {
+  let lastError;
+  for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (!isRetryableError(error)) {
+        throw lastError;
+      }
+      if (attempt === config.maxRetries) {
+        console.error(`[RSS Auto] ${operationName} failed after ${config.maxRetries} attempts: ${lastError.message}`);
+        throw lastError;
+      }
+      const delay = Math.min(
+        config.initialDelayMs * Math.pow(config.backoffMultiplier, attempt - 1),
+        config.maxDelayMs
+      );
+      console.warn(`[RSS Auto] ${operationName} failed (attempt ${attempt}/${config.maxRetries}), retrying in ${delay}ms: ${lastError.message}`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw lastError || new Error(`${operationName} failed after ${config.maxRetries} attempts`);
+}
 async function processWithConcurrency(items, limit, fn) {
   const results = [];
   for (let i = 0; i < items.length; i += limit) {
@@ -1640,7 +1677,10 @@ async function scrapeRSSSource(source) {
   };
   try {
     console.log(`[RSS Auto] Scraping ${source.name}...`);
-    const feed = await parser2.parseURL(source.url);
+    const feed = await withRetry2(
+      () => parser2.parseURL(source.url),
+      `Parsing RSS feed ${source.name}`
+    );
     result.articlesFound = feed.items?.length || 0;
     for (const item of feed.items || []) {
       try {
@@ -2226,6 +2266,41 @@ var newsletterService_default = {
 // api/_index.ts
 init_supabase();
 var CRON_SECRET = process.env.CRON_SECRET || "default-cron-secret-change-me";
+var DEFAULT_CRON_SECRET = "default-cron-secret-change-me";
+if (process.env.NODE_ENV === "production" && CRON_SECRET === DEFAULT_CRON_SECRET) {
+  logger_default.warn("\u26A0\uFE0F  CRITICAL: CRON_SECRET is using default value in production! Cron jobs will fail. Please set CRON_SECRET in Vercel environment variables.");
+}
+function verifyCronAuth(req) {
+  const authHeader = req.headers.authorization;
+  const providedSecret = authHeader?.replace(/^Bearer\s+/i, "").trim() || req.query.secret;
+  if (!providedSecret) {
+    return false;
+  }
+  return providedSecret === CRON_SECRET;
+}
+var CRON_JOB_TIMEOUT_MS = 550 * 1e3;
+async function withTimeout(operation, timeoutMs, operationName) {
+  let timeoutId;
+  const timeoutPromise = new Promise((resolve) => {
+    timeoutId = setTimeout(() => {
+      resolve({
+        timedOut: true,
+        error: `${operationName} timed out after ${timeoutMs / 1e3}s`
+      });
+    }, timeoutMs);
+  });
+  try {
+    const result = await Promise.race([
+      operation().then((r) => ({ result: r, timedOut: false })),
+      timeoutPromise
+    ]);
+    if (timeoutId) clearTimeout(timeoutId);
+    return result;
+  } catch (error) {
+    if (timeoutId) clearTimeout(timeoutId);
+    throw error;
+  }
+}
 function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
@@ -2481,26 +2556,43 @@ app.get("/api/newsletter/unsubscribe", async (req, res) => {
 });
 app.post("/api/newsletter/send-weekly", async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const providedSecret = authHeader?.replace("Bearer ", "") || req.query.secret;
-    if (providedSecret !== CRON_SECRET) {
-      logger_default.warn("Unauthorized newsletter send attempt");
+    if (!verifyCronAuth(req)) {
+      logger_default.warn("Unauthorized newsletter send attempt (POST)");
       return res.status(401).json({ error: "Unauthorized" });
     }
     logger_default.info("Starting weekly newsletter send");
-    const result = await newsletterService_default.sendWeeklyNewsletter();
+    const startTime = Date.now();
+    const timeoutResult = await withTimeout(
+      () => newsletterService_default.sendWeeklyNewsletter(),
+      CRON_JOB_TIMEOUT_MS,
+      "Newsletter send"
+    );
+    const duration = Date.now() - startTime;
+    if (timeoutResult.timedOut) {
+      logger_default.warn("Newsletter send timed out", { duration, error: timeoutResult.error });
+      return res.status(504).json({
+        success: false,
+        error: timeoutResult.error,
+        duration: `${duration}ms`,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    }
+    const result = timeoutResult.result;
     if (!result.success) {
       return res.status(500).json({
         success: false,
-        error: result.error
+        error: result.error,
+        duration: `${duration}ms`
       });
     }
+    logger_default.info("Newsletter send completed", { duration, sent: result.sent, failed: result.failed });
     return res.json({
       success: true,
       sent: result.sent,
       failed: result.failed,
       totalSubscribers: result.totalSubscribers,
-      articlesCount: result.articlesCount
+      articlesCount: result.articlesCount,
+      duration: `${duration}ms`
     });
   } catch (error) {
     logger_default.error("Newsletter send error", void 0, error);
@@ -2509,26 +2601,43 @@ app.post("/api/newsletter/send-weekly", async (req, res) => {
 });
 app.get("/api/newsletter/send-weekly", async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const providedSecret = authHeader?.replace("Bearer ", "") || req.query.secret;
-    if (providedSecret !== CRON_SECRET) {
+    if (!verifyCronAuth(req)) {
       logger_default.warn("Unauthorized newsletter send attempt (GET)");
       return res.status(401).json({ error: "Unauthorized" });
     }
     logger_default.info("Starting weekly newsletter send (via cron GET)");
-    const result = await newsletterService_default.sendWeeklyNewsletter();
+    const startTime = Date.now();
+    const timeoutResult = await withTimeout(
+      () => newsletterService_default.sendWeeklyNewsletter(),
+      CRON_JOB_TIMEOUT_MS,
+      "Newsletter send"
+    );
+    const duration = Date.now() - startTime;
+    if (timeoutResult.timedOut) {
+      logger_default.warn("Newsletter send timed out (GET)", { duration, error: timeoutResult.error });
+      return res.status(504).json({
+        success: false,
+        error: timeoutResult.error,
+        duration: `${duration}ms`,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    }
+    const result = timeoutResult.result;
     if (!result.success) {
       return res.status(500).json({
         success: false,
-        error: result.error
+        error: result.error,
+        duration: `${duration}ms`
       });
     }
+    logger_default.info("Newsletter send completed (via cron GET)", { duration, sent: result.sent, failed: result.failed });
     return res.json({
       success: true,
       sent: result.sent,
       failed: result.failed,
       totalSubscribers: result.totalSubscribers,
-      articlesCount: result.articlesCount
+      articlesCount: result.articlesCount,
+      duration: `${duration}ms`
     });
   } catch (error) {
     logger_default.error("Newsletter send error (GET)", void 0, error);
@@ -2640,15 +2749,29 @@ app.get("/api/dossiers/:slug", async (req, res) => {
 });
 app.post("/api/scrape-rss", async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
-      logger_default.warn("Unauthorized scrape-rss attempt");
+    if (!verifyCronAuth(req)) {
+      logger_default.warn("Unauthorized scrape-rss attempt (POST)");
       return res.status(401).json({ error: "Unauthorized" });
     }
     logger_default.info("Starting automatic RSS scraping...");
     const startTime = Date.now();
-    const results = await rssAutoService_default.scrapeAllSources();
+    const timeoutResult = await withTimeout(
+      () => rssAutoService_default.scrapeAllSources(),
+      CRON_JOB_TIMEOUT_MS,
+      "RSS scraping"
+    );
     const duration = Date.now() - startTime;
+    if (timeoutResult.timedOut) {
+      logger_default.warn("RSS scraping timed out", { duration, error: timeoutResult.error });
+      invalidateArticlesCache();
+      return res.status(504).json({
+        success: false,
+        message: timeoutResult.error,
+        duration: `${duration}ms`,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    }
+    const results = timeoutResult.result;
     logger_default.info("RSS scraping completed", {
       duration,
       sources: results.totalSources,
@@ -2683,19 +2806,32 @@ app.post("/api/scrape-rss", async (req, res) => {
   }
 });
 app.get("/api/scrape-rss", async (req, res) => {
-  const authHeader = req.headers.authorization;
-  const providedSecret = authHeader?.replace("Bearer ", "") || req.query.secret;
-  if (providedSecret !== CRON_SECRET) {
-    logger_default.warn("Unauthorized scrape-rss GET attempt");
+  if (!verifyCronAuth(req)) {
+    logger_default.warn("Unauthorized scrape-rss attempt (GET)");
     return res.status(401).json({ error: "Unauthorized" });
   }
   try {
-    logger_default.info("Starting manual RSS scraping...");
+    logger_default.info("Starting RSS scraping (via cron GET)...");
     const startTime = Date.now();
-    const results = await rssAutoService_default.scrapeAllSources();
+    const timeoutResult = await withTimeout(
+      () => rssAutoService_default.scrapeAllSources(),
+      CRON_JOB_TIMEOUT_MS,
+      "RSS scraping"
+    );
     const duration = Date.now() - startTime;
+    if (timeoutResult.timedOut) {
+      logger_default.warn("RSS scraping timed out (GET)", { duration, error: timeoutResult.error });
+      invalidateArticlesCache();
+      return res.status(504).json({
+        success: false,
+        message: timeoutResult.error,
+        duration: `${duration}ms`,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    }
+    const results = timeoutResult.result;
     invalidateArticlesCache();
-    logger_default.info("Manual RSS scraping completed", {
+    logger_default.info("RSS scraping completed (via cron GET)", {
       duration,
       sources: results.totalSources,
       newArticles: results.results.articlesNew,
@@ -2718,11 +2854,88 @@ app.get("/api/scrape-rss", async (req, res) => {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    logger_default.error("Manual RSS scraping error", { errorMessage }, error);
+    logger_default.error("RSS scraping error (GET)", { errorMessage }, error);
     return res.status(500).json({
       error: "RSS scraping failed",
       message: errorMessage,
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+});
+app.get("/api/cron/health", async (_req, res) => {
+  try {
+    const cronSecretConfigured = CRON_SECRET !== DEFAULT_CRON_SECRET && CRON_SECRET.length > 0;
+    const nodeEnv = process.env.NODE_ENV || "development";
+    let rssFeedsCount = 0;
+    let enabledFeedsCount = 0;
+    try {
+      const { data: feeds } = await supabaseAdmin.from("rss_feeds").select("enabled");
+      if (feeds) {
+        rssFeedsCount = feeds.length;
+        enabledFeedsCount = feeds.filter((f) => f.enabled).length;
+      }
+    } catch {
+    }
+    let subscribersCount = 0;
+    let confirmedSubscribersCount = 0;
+    try {
+      const { data: subscribers } = await supabaseAdmin.from("newsletter_subscribers").select("confirmed");
+      if (subscribers) {
+        subscribersCount = subscribers.length;
+        confirmedSubscribersCount = subscribers.filter((s) => s.confirmed).length;
+      }
+    } catch {
+    }
+    let lastScrapingTime = null;
+    let lastScrapingStatus = null;
+    try {
+      const { data: lastLog } = await supabaseAdmin.from("scraping_logs").select("started_at, status").order("started_at", { ascending: false }).limit(1).single();
+      if (lastLog) {
+        lastScrapingTime = lastLog.started_at;
+        lastScrapingStatus = lastLog.status;
+      }
+    } catch {
+    }
+    const healthStatus = {
+      status: cronSecretConfigured ? "healthy" : "misconfigured",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      environment: nodeEnv,
+      configuration: {
+        cronSecretConfigured,
+        maxDurationSeconds: 600,
+        timeoutSeconds: CRON_JOB_TIMEOUT_MS / 1e3
+      },
+      endpoints: {
+        scrapeRss: {
+          path: "/api/scrape-rss",
+          schedule: "0 */2 * * * (every 2 hours UTC)",
+          rssFeedsTotal: rssFeedsCount,
+          rssFeedsEnabled: enabledFeedsCount,
+          lastExecution: lastScrapingTime,
+          lastStatus: lastScrapingStatus
+        },
+        sendNewsletter: {
+          path: "/api/newsletter/send-weekly",
+          schedule: "0 8 * * 5 (Friday 8:00 UTC)",
+          subscribersTotal: subscribersCount,
+          subscribersConfirmed: confirmedSubscribersCount
+        }
+      }
+    };
+    if (!cronSecretConfigured) {
+      logger_default.warn("Cron health check: CRON_SECRET not configured");
+      return res.status(503).json({
+        ...healthStatus,
+        error: "CRON_SECRET is not configured or using default value"
+      });
+    }
+    return res.json(healthStatus);
+  } catch (error) {
+    logger_default.error("Cron health check error", void 0, error);
+    return res.status(500).json({
+      status: "error",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      error: error instanceof Error ? error.message : "Unknown error"
     });
   }
 });

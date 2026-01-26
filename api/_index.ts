@@ -24,6 +24,66 @@ import logger from "../server/lib/logger";
 
 // Cron secret for automated scraping
 const CRON_SECRET = process.env.CRON_SECRET || "default-cron-secret-change-me";
+const DEFAULT_CRON_SECRET = "default-cron-secret-change-me";
+
+// Warn if using default secret in production
+if (process.env.NODE_ENV === "production" && CRON_SECRET === DEFAULT_CRON_SECRET) {
+  logger.warn("⚠️  CRITICAL: CRON_SECRET is using default value in production! Cron jobs will fail. Please set CRON_SECRET in Vercel environment variables.");
+}
+
+/**
+ * Verifies cron job authentication from Authorization header or query parameter
+ * Supports both "Bearer {token}" format and query ?secret={token}
+ * @param req Express request object
+ * @returns true if authenticated, false otherwise
+ */
+function verifyCronAuth(req: Request): boolean {
+  const authHeader = req.headers.authorization;
+  const providedSecret = authHeader?.replace(/^Bearer\s+/i, "").trim() || (req.query.secret as string | undefined);
+  
+  if (!providedSecret) {
+    return false;
+  }
+  
+  return providedSecret === CRON_SECRET;
+}
+
+// Cron job timeout configuration (slightly less than maxDuration to allow graceful response)
+const CRON_JOB_TIMEOUT_MS = 550 * 1000; // 550 seconds (maxDuration is 600s)
+
+/**
+ * Wraps an async operation with a timeout
+ * Returns partial result on timeout instead of throwing
+ */
+async function withTimeout<T>(
+  operation: () => Promise<T>,
+  timeoutMs: number,
+  operationName: string
+): Promise<{ result: T; timedOut: false } | { timedOut: true; error: string }> {
+  let timeoutId: NodeJS.Timeout | undefined;
+  
+  const timeoutPromise = new Promise<{ timedOut: true; error: string }>((resolve) => {
+    timeoutId = setTimeout(() => {
+      resolve({ 
+        timedOut: true, 
+        error: `${operationName} timed out after ${timeoutMs / 1000}s` 
+      });
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([
+      operation().then((r) => ({ result: r, timedOut: false as const })),
+      timeoutPromise,
+    ]);
+    
+    if (timeoutId) clearTimeout(timeoutId);
+    return result;
+  } catch (error) {
+    if (timeoutId) clearTimeout(timeoutId);
+    throw error;
+  }
+}
 
 // Email validation helper
 function isValidEmail(email: string): boolean {
@@ -365,23 +425,44 @@ app.get("/api/newsletter/unsubscribe", async (req, res) => {
 app.post("/api/newsletter/send-weekly", async (req, res) => {
   try {
     // Verify cron secret
-    const authHeader = req.headers.authorization;
-    const providedSecret = authHeader?.replace("Bearer ", "") || req.query.secret;
-
-    if (providedSecret !== CRON_SECRET) {
-      logger.warn("Unauthorized newsletter send attempt");
+    if (!verifyCronAuth(req)) {
+      logger.warn("Unauthorized newsletter send attempt (POST)");
       return res.status(401).json({ error: "Unauthorized" });
     }
 
     logger.info("Starting weekly newsletter send");
-    const result = await newsletterService.sendWeeklyNewsletter();
+    const startTime = Date.now();
+
+    // Use timeout wrapper to ensure graceful handling before Vercel timeout
+    const timeoutResult = await withTimeout(
+      () => newsletterService.sendWeeklyNewsletter(),
+      CRON_JOB_TIMEOUT_MS,
+      "Newsletter send"
+    );
+
+    const duration = Date.now() - startTime;
+
+    if (timeoutResult.timedOut) {
+      logger.warn("Newsletter send timed out", { duration, error: timeoutResult.error });
+      return res.status(504).json({
+        success: false,
+        error: timeoutResult.error,
+        duration: `${duration}ms`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const result = timeoutResult.result;
 
     if (!result.success) {
       return res.status(500).json({
         success: false,
         error: result.error,
+        duration: `${duration}ms`,
       });
     }
+
+    logger.info("Newsletter send completed", { duration, sent: result.sent, failed: result.failed });
 
     return res.json({
       success: true,
@@ -389,6 +470,7 @@ app.post("/api/newsletter/send-weekly", async (req, res) => {
       failed: result.failed,
       totalSubscribers: result.totalSubscribers,
       articlesCount: result.articlesCount,
+      duration: `${duration}ms`,
     });
   } catch (error) {
     logger.error("Newsletter send error", undefined, error);
@@ -400,23 +482,44 @@ app.post("/api/newsletter/send-weekly", async (req, res) => {
 // Vercel cron jobs send GET requests with Authorization: Bearer {CRON_SECRET}
 app.get("/api/newsletter/send-weekly", async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const providedSecret = authHeader?.replace("Bearer ", "") || req.query.secret as string;
-
-    if (providedSecret !== CRON_SECRET) {
+    if (!verifyCronAuth(req)) {
       logger.warn("Unauthorized newsletter send attempt (GET)");
       return res.status(401).json({ error: "Unauthorized" });
     }
 
     logger.info("Starting weekly newsletter send (via cron GET)");
-    const result = await newsletterService.sendWeeklyNewsletter();
+    const startTime = Date.now();
+
+    // Use timeout wrapper to ensure graceful handling before Vercel timeout
+    const timeoutResult = await withTimeout(
+      () => newsletterService.sendWeeklyNewsletter(),
+      CRON_JOB_TIMEOUT_MS,
+      "Newsletter send"
+    );
+
+    const duration = Date.now() - startTime;
+
+    if (timeoutResult.timedOut) {
+      logger.warn("Newsletter send timed out (GET)", { duration, error: timeoutResult.error });
+      return res.status(504).json({
+        success: false,
+        error: timeoutResult.error,
+        duration: `${duration}ms`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const result = timeoutResult.result;
 
     if (!result.success) {
       return res.status(500).json({
         success: false,
         error: result.error,
+        duration: `${duration}ms`,
       });
     }
+
+    logger.info("Newsletter send completed (via cron GET)", { duration, sent: result.sent, failed: result.failed });
 
     return res.json({
       success: true,
@@ -424,6 +527,7 @@ app.get("/api/newsletter/send-weekly", async (req, res) => {
       failed: result.failed,
       totalSubscribers: result.totalSubscribers,
       articlesCount: result.articlesCount,
+      duration: `${duration}ms`,
     });
   } catch (error) {
     logger.error("Newsletter send error (GET)", undefined, error);
@@ -573,18 +677,36 @@ app.get("/api/dossiers/:slug", async (req, res) => {
 app.post("/api/scrape-rss", async (req, res) => {
   try {
     // Verify authorization
-    const authHeader = req.headers.authorization;
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
-      logger.warn("Unauthorized scrape-rss attempt");
+    if (!verifyCronAuth(req)) {
+      logger.warn("Unauthorized scrape-rss attempt (POST)");
       return res.status(401).json({ error: "Unauthorized" });
     }
 
     logger.info("Starting automatic RSS scraping...");
     const startTime = Date.now();
 
-    const results = await rssAutoService.scrapeAllSources();
+    // Use timeout wrapper to ensure graceful handling before Vercel timeout
+    const timeoutResult = await withTimeout(
+      () => rssAutoService.scrapeAllSources(),
+      CRON_JOB_TIMEOUT_MS,
+      "RSS scraping"
+    );
 
     const duration = Date.now() - startTime;
+
+    if (timeoutResult.timedOut) {
+      logger.warn("RSS scraping timed out", { duration, error: timeoutResult.error });
+      // Invalidate cache even on timeout (partial results may have been saved)
+      invalidateArticlesCache();
+      return res.status(504).json({
+        success: false,
+        message: timeoutResult.error,
+        duration: `${duration}ms`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const results = timeoutResult.result;
     logger.info("RSS scraping completed", {
       duration,
       sources: results.totalSources,
@@ -625,25 +747,43 @@ app.post("/api/scrape-rss", async (req, res) => {
 // GET version for Vercel cron job and manual testing
 // Vercel cron jobs send GET requests with Authorization: Bearer {CRON_SECRET}
 app.get("/api/scrape-rss", async (req, res) => {
-  const authHeader = req.headers.authorization;
-  const providedSecret = authHeader?.replace("Bearer ", "") || req.query.secret as string;
-  
-  if (providedSecret !== CRON_SECRET) {
-    logger.warn("Unauthorized scrape-rss GET attempt");
+  if (!verifyCronAuth(req)) {
+    logger.warn("Unauthorized scrape-rss attempt (GET)");
     return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {
-    logger.info("Starting manual RSS scraping...");
+    logger.info("Starting RSS scraping (via cron GET)...");
     const startTime = Date.now();
-    const results = await rssAutoService.scrapeAllSources();
+
+    // Use timeout wrapper to ensure graceful handling before Vercel timeout
+    const timeoutResult = await withTimeout(
+      () => rssAutoService.scrapeAllSources(),
+      CRON_JOB_TIMEOUT_MS,
+      "RSS scraping"
+    );
+
     const duration = Date.now() - startTime;
+
+    if (timeoutResult.timedOut) {
+      logger.warn("RSS scraping timed out (GET)", { duration, error: timeoutResult.error });
+      // Invalidate cache even on timeout (partial results may have been saved)
+      invalidateArticlesCache();
+      return res.status(504).json({
+        success: false,
+        message: timeoutResult.error,
+        duration: `${duration}ms`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const results = timeoutResult.result;
 
     // Invalidate articles cache after scraping
     invalidateArticlesCache();
 
     // Log completion with details
-    logger.info("Manual RSS scraping completed", {
+    logger.info("RSS scraping completed (via cron GET)", {
       duration,
       sources: results.totalSources,
       newArticles: results.results.articlesNew,
@@ -667,11 +807,118 @@ app.get("/api/scrape-rss", async (req, res) => {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    logger.error("Manual RSS scraping error", { errorMessage }, error);
+    logger.error("RSS scraping error (GET)", { errorMessage }, error);
     return res.status(500).json({ 
       error: "RSS scraping failed",
       message: errorMessage,
       timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// ============ CRON HEALTH CHECK ============
+
+/**
+ * Health check endpoint for cron jobs
+ * Returns configuration status and last execution info
+ * This endpoint is public (no auth required) for monitoring purposes
+ */
+app.get("/api/cron/health", async (_req, res) => {
+  try {
+    const cronSecretConfigured = CRON_SECRET !== DEFAULT_CRON_SECRET && CRON_SECRET.length > 0;
+    const nodeEnv = process.env.NODE_ENV || "development";
+    
+    // Get RSS feeds count
+    let rssFeedsCount = 0;
+    let enabledFeedsCount = 0;
+    try {
+      const { data: feeds } = await supabaseAdmin
+        .from("rss_feeds")
+        .select("enabled");
+      if (feeds) {
+        rssFeedsCount = feeds.length;
+        enabledFeedsCount = feeds.filter(f => f.enabled).length;
+      }
+    } catch {
+      // Ignore error - DB might not have the table
+    }
+    
+    // Get newsletter subscribers count
+    let subscribersCount = 0;
+    let confirmedSubscribersCount = 0;
+    try {
+      const { data: subscribers } = await supabaseAdmin
+        .from("newsletter_subscribers")
+        .select("confirmed");
+      if (subscribers) {
+        subscribersCount = subscribers.length;
+        confirmedSubscribersCount = subscribers.filter(s => s.confirmed).length;
+      }
+    } catch {
+      // Ignore error - DB might not have the table
+    }
+    
+    // Get last scraping log
+    let lastScrapingTime: string | null = null;
+    let lastScrapingStatus: string | null = null;
+    try {
+      const { data: lastLog } = await supabaseAdmin
+        .from("scraping_logs")
+        .select("started_at, status")
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .single();
+      if (lastLog) {
+        lastScrapingTime = lastLog.started_at;
+        lastScrapingStatus = lastLog.status;
+      }
+    } catch {
+      // Ignore error - DB might not have the table
+    }
+    
+    const healthStatus = {
+      status: cronSecretConfigured ? "healthy" : "misconfigured",
+      timestamp: new Date().toISOString(),
+      environment: nodeEnv,
+      configuration: {
+        cronSecretConfigured,
+        maxDurationSeconds: 600,
+        timeoutSeconds: CRON_JOB_TIMEOUT_MS / 1000,
+      },
+      endpoints: {
+        scrapeRss: {
+          path: "/api/scrape-rss",
+          schedule: "0 */2 * * * (every 2 hours UTC)",
+          rssFeedsTotal: rssFeedsCount,
+          rssFeedsEnabled: enabledFeedsCount,
+          lastExecution: lastScrapingTime,
+          lastStatus: lastScrapingStatus,
+        },
+        sendNewsletter: {
+          path: "/api/newsletter/send-weekly",
+          schedule: "0 8 * * 5 (Friday 8:00 UTC)",
+          subscribersTotal: subscribersCount,
+          subscribersConfirmed: confirmedSubscribersCount,
+        },
+      },
+    };
+    
+    // Return 503 if misconfigured
+    if (!cronSecretConfigured) {
+      logger.warn("Cron health check: CRON_SECRET not configured");
+      return res.status(503).json({
+        ...healthStatus,
+        error: "CRON_SECRET is not configured or using default value",
+      });
+    }
+    
+    return res.json(healthStatus);
+  } catch (error) {
+    logger.error("Cron health check error", undefined, error);
+    return res.status(500).json({
+      status: "error",
+      timestamp: new Date().toISOString(),
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });
