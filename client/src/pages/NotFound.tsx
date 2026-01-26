@@ -19,9 +19,8 @@ export default function NotFound() {
         description="La page que vous recherchez n'existe pas ou a été déplacée."
         url="https://flashinfoafrique.com/"
       />
-      {/* Add noindex for 404 pages to prevent SEO issues */}
+      {/* Keep prerender-status-code for SSR/prerendering services to return proper 404 status */}
       <Helmet>
-        <meta name="robots" content="noindex, nofollow" />
         <meta name="prerender-status-code" content="404" />
       </Helmet>
       <Card className="w-full max-w-lg mx-4 shadow-lg border-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
