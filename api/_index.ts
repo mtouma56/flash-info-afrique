@@ -949,15 +949,30 @@ app.post("/api/admin/login", async (req, res) => {
 
     const authResult = await authenticateByUsername(username, password);
 
-    if (!authResult) {
-      return res.status(401).json({ error: "Identifiants incorrects" });
+    if (!authResult.success) {
+      return res.status(401).json({ 
+        error: authResult.errorMessage || "Identifiants incorrects",
+        code: authResult.errorCode || "UNKNOWN_ERROR"
+      });
+    }
+
+    // Vérifier que les données nécessaires sont présentes
+    if (!authResult.user || !authResult.token) {
+      logger.error("Login error: Missing user or token in authResult", { 
+        hasUser: !!authResult.user, 
+        hasToken: !!authResult.token 
+      });
+      return res.status(500).json({ 
+        error: "Erreur lors de la connexion",
+        code: "INCOMPLETE_AUTH_RESULT"
+      });
     }
 
     return res.json({
       token: authResult.token,
       session: {
         access_token: authResult.token,
-        refresh_token: authResult.refreshToken,
+        refresh_token: authResult.refreshToken || authResult.token,
       },
       user: {
         id: authResult.user.userId,
@@ -968,7 +983,12 @@ app.post("/api/admin/login", async (req, res) => {
     });
   } catch (error) {
     logger.error("Login error", undefined, error);
-    return res.status(500).json({ error: "Erreur lors de la connexion" });
+    const errorMessage = error instanceof Error ? error.message : "Erreur inattendue";
+    return res.status(500).json({ 
+      error: "Erreur lors de la connexion",
+      message: errorMessage,
+      code: "SERVER_ERROR"
+    });
   }
 });
 
