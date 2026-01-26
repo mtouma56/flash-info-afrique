@@ -4,6 +4,7 @@
 import "dotenv/config";
 
 import compression from "compression";
+import cors from "cors";
 import express, { Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -147,6 +148,53 @@ app.use(
     xssFilter: true,
   })
 );
+
+// CORS configuration
+const corsOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",").map(origin => origin.trim())
+  : [];
+
+// Add default origins based on environment
+const defaultOrigins = process.env.NODE_ENV === "production"
+  ? [
+      "https://flashinfoafrique.com",
+      "https://www.flashinfoafrique.com",
+      "https://flash-info-afrique.vercel.app",
+    ]
+  : [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:4000",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:3001",
+    ];
+
+const allowedOrigins = [...new Set([...corsOrigins, ...defaultOrigins])];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, server-to-server)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Log blocked origins in production for debugging
+    if (process.env.NODE_ENV === "production") {
+      logger.warn("CORS blocked origin", { origin });
+    }
+    
+    return callback(new Error("Not allowed by CORS"), false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  exposedHeaders: ["X-Cache", "X-Total-Count"],
+  maxAge: 86400, // 24 hours
+}));
 
 // Compression for better performance
 app.use(compression());
@@ -1264,6 +1312,58 @@ app.post("/api/admin/rss/articles/:id/edit", requireAuth, async (req, res) => {
   } catch (error) {
     logger.error("RSS article edit error", undefined, error);
     return res.status(500).json({ error: "Erreur lors de la modification" });
+  }
+});
+
+// ============ RSS FEED ============
+
+// Cache for RSS feed
+let rssFeedCache: { data: string; timestamp: number } | null = null;
+const RSS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// Public RSS feed endpoint
+app.get("/rss.xml", async (_req, res) => {
+  try {
+    // Check cache
+    if (rssFeedCache && Date.now() - rssFeedCache.timestamp < RSS_CACHE_TTL_MS) {
+      res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
+      res.setHeader("X-Cache", "HIT");
+      return res.send(rssFeedCache.data);
+    }
+
+    // Get published articles (latest 30)
+    const allArticles = await storage.getPublishedArticles();
+    const articles = allArticles.slice(0, 30);
+
+    // Generate RSS feed
+    const rssFeed = rssService.generateRSSFeed(articles);
+
+    // Update cache
+    rssFeedCache = {
+      data: rssFeed,
+      timestamp: Date.now(),
+    };
+
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
+    res.setHeader("X-Cache", "MISS");
+    return res.send(rssFeed);
+  } catch (error) {
+    logger.error("RSS feed generation error", undefined, error);
+    
+    // Return a minimal valid RSS feed on error
+    const errorFeed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Flash Info Afrique</title>
+    <link>https://flashinfoafrique.com</link>
+    <description>Actualité économique UEMOA</description>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+  </channel>
+</rss>`;
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    return res.status(500).send(errorFeed);
   }
 });
 

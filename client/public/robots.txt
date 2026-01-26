@@ -8,6 +8,9 @@ Allow: /
 Sitemap: https://flashinfoafrique.com/sitemap.xml
 Sitemap: https://flashinfoafrique.com/news-sitemap.xml
 
+# RSS Feed
+# https://flashinfoafrique.com/rss.xml
+
 # Disallow admin and internal API routes
 Disallow: /api/admin/
 Disallow: /api/scrape-rss

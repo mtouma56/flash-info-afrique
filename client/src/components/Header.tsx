@@ -69,6 +69,33 @@ export default function Header() {
     [setLocation]
   );
 
+  // Highlight matching text in search results
+  const highlightMatch = useCallback((text: string, query: string) => {
+    if (!query.trim()) return text;
+    
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    const parts = text.split(regex);
+    
+    return parts.map((part, index) => 
+      regex.test(part) ? (
+        <mark key={index} className="bg-primary/20 text-primary font-medium rounded px-0.5">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  }, []);
+
+  // Category colors map
+  const categoryColors: Record<string, string> = {
+    'banque-finance': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+    'regulation-conformite': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    'marches-investissements': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+    'analyses-decryptages': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+    'actualite': 'bg-lime-100 text-lime-800 dark:bg-lime-900/30 dark:text-lime-300',
+  };
+
   return (
     <>
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -110,16 +137,29 @@ export default function Header() {
 
             {/* Right Actions */}
             <div className="flex items-center space-x-1 sm:space-x-2">
-              <ThemeToggle />
+              {/* Desktop Search Bar - Always visible */}
+              <button
+                onClick={() => setSearchOpen(true)}
+                className="hidden lg:flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground bg-muted/50 hover:bg-muted border border-border rounded-lg transition-colors min-w-[200px] xl:min-w-[280px]"
+                aria-label="Rechercher (Ctrl+K)"
+              >
+                <Search className="h-4 w-4" aria-hidden="true" />
+                <span className="flex-1 text-left">Rechercher...</span>
+                <kbd className="hidden xl:inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-mono bg-background border border-border rounded">
+                  <span className="text-xs">⌘</span>K
+                </kbd>
+              </button>
+              {/* Search icon for tablet */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="hidden sm:flex h-11 w-11 min-h-[44px] min-w-[44px]"
+                className="hidden sm:flex lg:hidden h-11 w-11 min-h-[44px] min-w-[44px]"
                 onClick={() => setSearchOpen(true)}
                 aria-label="Rechercher (Ctrl+K)"
               >
                 <Search className="h-5 w-5" aria-hidden="true" />
               </Button>
+              <ThemeToggle />
               <Button
                 variant="ghost"
                 size="icon"
@@ -198,25 +238,53 @@ export default function Header() {
             {searchQuery && (
               <div className="space-y-2 max-h-80 overflow-y-auto" role="listbox" aria-label="Résultats de recherche">
                 {searchResults.length > 0 ? (
-                  searchResults.map((article) => (
-                    <button
-                      key={article.id}
-                      className="w-full text-left p-3 rounded-lg hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
-                      onClick={() => handleSearchSelect(article.slug)}
-                      role="option"
-                    >
-                      <h4 className="font-medium text-foreground line-clamp-1">
-                        {article.title}
-                      </h4>
-                      <p className="text-sm text-muted-foreground line-clamp-1 mt-1">
-                        {article.excerpt}
-                      </p>
-                    </button>
-                  ))
+                  <>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      {searchResults.length} résultat{searchResults.length > 1 ? 's' : ''} trouvé{searchResults.length > 1 ? 's' : ''}
+                    </p>
+                    {searchResults.map((article) => (
+                      <button
+                        key={article.id}
+                        className="w-full text-left p-3 rounded-lg hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary border border-transparent hover:border-border"
+                        onClick={() => handleSearchSelect(article.slug)}
+                        role="option"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="font-medium text-foreground line-clamp-1 flex-1">
+                            {highlightMatch(article.title, searchQuery)}
+                          </h4>
+                          {article.category && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${categoryColors[article.category] || 'bg-muted text-muted-foreground'}`}>
+                              {article.category.replace(/-/g, ' ')}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
+                          {highlightMatch(article.excerpt.slice(0, 120), searchQuery)}
+                          {article.excerpt.length > 120 ? '...' : ''}
+                        </p>
+                        {article.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {article.tags.slice(0, 3).map((tag) => (
+                              <span key={tag} className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </>
                 ) : (
-                  <p className="text-center text-muted-foreground py-4">
-                    Aucun résultat pour "{searchQuery}"
-                  </p>
+                  <div className="text-center py-8">
+                    <Search className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
+                    <p className="text-muted-foreground">
+                      Aucun résultat pour "<span className="font-medium">{searchQuery}</span>"
+                    </p>
+                    <p className="text-sm text-muted-foreground/70 mt-1">
+                      Essayez avec d'autres mots-clés
+                    </p>
+                  </div>
                 )}
               </div>
             )}

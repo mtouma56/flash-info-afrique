@@ -154,7 +154,7 @@ export default function Home() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
-        <SEO />
+        <SEO url="https://flashinfoafrique.com/" />
         <Header />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
@@ -169,7 +169,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <SEO />
+      <SEO url="https://flashinfoafrique.com/" />
       <StructuredData />
       <Header />
 

@@ -6,15 +6,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useArticles } from "@/hooks/useArticles";
-import { AlertCircle, FileText, Loader2, Newspaper, RefreshCw, WifiOff } from "lucide-react";
-import { useCallback, useState } from "react";
+import { AlertCircle, ChevronLeft, ChevronRight, FileText, Loader2, Newspaper, RefreshCw, WifiOff } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+
+const ARTICLES_PER_PAGE = 12;
 
 export default function Articles() {
   const [, setLocation] = useLocation();
   const { articles, categories, isLoading, error, errorType, isOffline, refetch } = useArticles();
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const handleRetry = useCallback(async () => {
     setIsRetrying(true);
@@ -31,9 +34,67 @@ export default function Articles() {
     : articles;
 
   // Sort by date (newest first)
-  const sortedArticles = [...filteredArticles].sort(
-    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+  const sortedArticles = useMemo(() => 
+    [...filteredArticles].sort(
+      (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    ),
+    [filteredArticles]
   );
+
+  // Pagination
+  const totalPages = Math.ceil(sortedArticles.length / ARTICLES_PER_PAGE);
+  const paginatedArticles = useMemo(() => {
+    const start = (currentPage - 1) * ARTICLES_PER_PAGE;
+    const end = start + ARTICLES_PER_PAGE;
+    return sortedArticles.slice(start, end);
+  }, [sortedArticles, currentPage]);
+
+  // Reset to page 1 when category changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeCategory]);
+
+  // Handle page change with scroll to top
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+    // Scroll to top of articles section
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // Generate page numbers to display
+  const getPageNumbers = useMemo(() => {
+    const pages: (number | 'ellipsis')[] = [];
+    const maxVisiblePages = 5;
+    
+    if (totalPages <= maxVisiblePages) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    
+    // Always show first page
+    pages.push(1);
+    
+    if (currentPage > 3) {
+      pages.push('ellipsis');
+    }
+    
+    // Pages around current
+    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+      if (!pages.includes(i)) {
+        pages.push(i);
+      }
+    }
+    
+    if (currentPage < totalPages - 2) {
+      pages.push('ellipsis');
+    }
+    
+    // Always show last page
+    if (!pages.includes(totalPages)) {
+      pages.push(totalPages);
+    }
+    
+    return pages;
+  }, [currentPage, totalPages]);
 
   if (isLoading) {
     return (
@@ -166,20 +227,92 @@ export default function Articles() {
           </div>
 
           {/* Articles count */}
-          <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground mb-6 sm:mb-8 font-['Sora']">
-            {sortedArticles.length} article{sortedArticles.length > 1 ? "s" : ""}
-            {activeCategory && categories.find((c) => c.id === activeCategory) 
-              ? ` dans "${categories.find((c) => c.id === activeCategory)?.name}"`
-              : ""}
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6 sm:mb-8">
+            <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground font-['Sora']">
+              {sortedArticles.length} article{sortedArticles.length > 1 ? "s" : ""}
+              {activeCategory && categories.find((c) => c.id === activeCategory) 
+                ? ` dans "${categories.find((c) => c.id === activeCategory)?.name}"`
+                : ""}
+            </h2>
+            {totalPages > 1 && (
+              <p className="text-sm text-muted-foreground">
+                Page {currentPage} sur {totalPages}
+              </p>
+            )}
+          </div>
 
           {/* Articles Grid */}
-          {sortedArticles.length > 0 ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6" role="tabpanel">
-              {sortedArticles.map((article) => (
-                <ArticleCard key={article.id} article={article} />
-              ))}
-            </div>
+          {paginatedArticles.length > 0 ? (
+            <>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6" role="tabpanel">
+                {paginatedArticles.map((article) => (
+                  <ArticleCard key={article.id} article={article} />
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <nav 
+                  className="flex items-center justify-center gap-1 mt-8 sm:mt-12" 
+                  aria-label="Pagination des articles"
+                >
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    aria-label="Page précédente"
+                    className="h-10 w-10"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+
+                  <div className="flex items-center gap-1">
+                    {getPageNumbers.map((pageNum, index) => (
+                      pageNum === 'ellipsis' ? (
+                        <span 
+                          key={`ellipsis-${index}`} 
+                          className="px-2 text-muted-foreground"
+                          aria-hidden="true"
+                        >
+                          ...
+                        </span>
+                      ) : (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? "default" : "outline"}
+                          size="icon"
+                          onClick={() => handlePageChange(pageNum)}
+                          aria-label={`Page ${pageNum}`}
+                          aria-current={currentPage === pageNum ? "page" : undefined}
+                          className="h-10 w-10"
+                        >
+                          {pageNum}
+                        </Button>
+                      )
+                    ))}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    aria-label="Page suivante"
+                    className="h-10 w-10"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </nav>
+              )}
+
+              {/* Page info */}
+              {totalPages > 1 && (
+                <p className="text-center text-sm text-muted-foreground mt-4">
+                  Affichage de {(currentPage - 1) * ARTICLES_PER_PAGE + 1} à {Math.min(currentPage * ARTICLES_PER_PAGE, sortedArticles.length)} sur {sortedArticles.length} articles
+                </p>
+              )}
+            </>
           ) : (
             <div className="text-center py-16">
               <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4" />

@@ -226,7 +226,102 @@ function extractTags(text: string): string[] {
   return uniqueNouns;
 }
 
+// Generate RSS 2.0 XML feed for public consumption
+export function generateRSSFeed(articles: Array<{
+  title: string;
+  slug: string;
+  excerpt: string;
+  content?: string;
+  category: string;
+  publishedAt: string;
+  imageUrl?: string;
+  source?: { name: string; url: string };
+}>): string {
+  const siteUrl = process.env.SITE_URL || "https://flashinfoafrique.com";
+  const now = new Date().toUTCString();
+
+  // Escape XML special characters
+  const escapeXml = (text: string): string => {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+  };
+
+  // Generate items
+  const items = articles.map(article => {
+    const articleUrl = `${siteUrl}/article/${article.slug}`;
+    const pubDate = new Date(article.publishedAt).toUTCString();
+    const description = escapeXml(article.excerpt || "");
+    const title = escapeXml(article.title || "Sans titre");
+    const category = escapeXml(article.category || "Actualité");
+
+    let itemXml = `    <item>
+      <title>${title}</title>
+      <link>${articleUrl}</link>
+      <guid isPermaLink="true">${articleUrl}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${description}</description>
+      <category>${category}</category>`;
+
+    // Add image if available
+    if (article.imageUrl) {
+      itemXml += `
+      <enclosure url="${escapeXml(article.imageUrl)}" type="image/jpeg" />`;
+    }
+
+    // Add source if available
+    if (article.source?.name) {
+      itemXml += `
+      <source url="${escapeXml(article.source.url || siteUrl)}">${escapeXml(article.source.name)}</source>`;
+    }
+
+    itemXml += `
+    </item>`;
+
+    return itemXml;
+  }).join("\n");
+
+  // Generate full RSS feed
+  const rssFeed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" 
+  xmlns:atom="http://www.w3.org/2005/Atom"
+  xmlns:media="http://search.yahoo.com/mrss/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Flash Info Afrique - L'actualité économique UEMOA</title>
+    <link>${siteUrl}</link>
+    <description>Votre source d'information sur l'actualité économique, financière et réglementaire de la zone UEMOA. Analyses, décryptages et dossiers sur la finance africaine.</description>
+    <language>fr-FR</language>
+    <lastBuildDate>${now}</lastBuildDate>
+    <pubDate>${now}</pubDate>
+    <atom:link href="${siteUrl}/rss.xml" rel="self" type="application/rss+xml"/>
+    <image>
+      <url>${siteUrl}/logo.png</url>
+      <title>Flash Info Afrique</title>
+      <link>${siteUrl}</link>
+      <width>144</width>
+      <height>144</height>
+    </image>
+    <copyright>Copyright ${new Date().getFullYear()} Flash Info Afrique. Tous droits réservés.</copyright>
+    <managingEditor>contact@flashinfoafrique.com (Flash Info Afrique)</managingEditor>
+    <webMaster>contact@flashinfoafrique.com (Flash Info Afrique)</webMaster>
+    <category>Finance</category>
+    <category>Economie</category>
+    <category>Afrique</category>
+    <category>UEMOA</category>
+    <ttl>60</ttl>
+${items}
+  </channel>
+</rss>`;
+
+  return rssFeed;
+}
+
 export default {
   testRSSFeed,
   fetchRSSFeed,
+  generateRSSFeed,
 };

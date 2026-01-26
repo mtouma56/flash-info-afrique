@@ -44,6 +44,7 @@ var init_supabase = __esm({
 // api/_index.ts
 import "dotenv/config";
 import compression from "compression";
+import cors from "cors";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -1314,9 +1315,74 @@ function extractTags(text) {
   const uniqueNouns = Array.from(new Set(properNouns)).filter((word) => !commonWords.has(word.toLowerCase())).slice(0, 5);
   return uniqueNouns;
 }
+function generateRSSFeed(articles) {
+  const siteUrl2 = process.env.SITE_URL || "https://flashinfoafrique.com";
+  const now = (/* @__PURE__ */ new Date()).toUTCString();
+  const escapeXml2 = (text) => {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+  };
+  const items = articles.map((article) => {
+    const articleUrl = `${siteUrl2}/article/${article.slug}`;
+    const pubDate = new Date(article.publishedAt).toUTCString();
+    const description = escapeXml2(article.excerpt || "");
+    const title = escapeXml2(article.title || "Sans titre");
+    const category = escapeXml2(article.category || "Actualit\xE9");
+    let itemXml = `    <item>
+      <title>${title}</title>
+      <link>${articleUrl}</link>
+      <guid isPermaLink="true">${articleUrl}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${description}</description>
+      <category>${category}</category>`;
+    if (article.imageUrl) {
+      itemXml += `
+      <enclosure url="${escapeXml2(article.imageUrl)}" type="image/jpeg" />`;
+    }
+    if (article.source?.name) {
+      itemXml += `
+      <source url="${escapeXml2(article.source.url || siteUrl2)}">${escapeXml2(article.source.name)}</source>`;
+    }
+    itemXml += `
+    </item>`;
+    return itemXml;
+  }).join("\n");
+  const rssFeed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" 
+  xmlns:atom="http://www.w3.org/2005/Atom"
+  xmlns:media="http://search.yahoo.com/mrss/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Flash Info Afrique - L'actualit\xE9 \xE9conomique UEMOA</title>
+    <link>${siteUrl2}</link>
+    <description>Votre source d'information sur l'actualit\xE9 \xE9conomique, financi\xE8re et r\xE9glementaire de la zone UEMOA. Analyses, d\xE9cryptages et dossiers sur la finance africaine.</description>
+    <language>fr-FR</language>
+    <lastBuildDate>${now}</lastBuildDate>
+    <pubDate>${now}</pubDate>
+    <atom:link href="${siteUrl2}/rss.xml" rel="self" type="application/rss+xml"/>
+    <image>
+      <url>${siteUrl2}/logo.png</url>
+      <title>Flash Info Afrique</title>
+      <link>${siteUrl2}</link>
+      <width>144</width>
+      <height>144</height>
+    </image>
+    <copyright>Copyright ${(/* @__PURE__ */ new Date()).getFullYear()} Flash Info Afrique. Tous droits r\xE9serv\xE9s.</copyright>
+    <managingEditor>contact@flashinfoafrique.com (Flash Info Afrique)</managingEditor>
+    <webMaster>contact@flashinfoafrique.com (Flash Info Afrique)</webMaster>
+    <category>Finance</category>
+    <category>Economie</category>
+    <category>Afrique</category>
+    <category>UEMOA</category>
+    <ttl>60</ttl>
+${items}
+  </channel>
+</rss>`;
+  return rssFeed;
+}
 var rssService_default = {
   testRSSFeed,
-  fetchRSSFeed
+  fetchRSSFeed,
+  generateRSSFeed
 };
 
 // server/services/rssAutoService.ts
@@ -2237,6 +2303,39 @@ app.use(
     xssFilter: true
   })
 );
+var corsOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(",").map((origin) => origin.trim()) : [];
+var defaultOrigins = process.env.NODE_ENV === "production" ? [
+  "https://flashinfoafrique.com",
+  "https://www.flashinfoafrique.com",
+  "https://flash-info-afrique.vercel.app"
+] : [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:4000",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001"
+];
+var allowedOrigins = [.../* @__PURE__ */ new Set([...corsOrigins, ...defaultOrigins])];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    if (process.env.NODE_ENV === "production") {
+      logger_default.warn("CORS blocked origin", { origin });
+    }
+    return callback(new Error("Not allowed by CORS"), false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  exposedHeaders: ["X-Cache", "X-Total-Count"],
+  maxAge: 86400
+  // 24 hours
+}));
 app.use(compression());
 var generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1e3,
@@ -2391,6 +2490,34 @@ app.post("/api/newsletter/send-weekly", async (req, res) => {
     return res.status(500).json({ error: "Failed to send newsletter" });
   }
 });
+app.get("/api/newsletter/send-weekly", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const providedSecret = authHeader?.replace("Bearer ", "") || req.query.secret;
+    if (providedSecret !== CRON_SECRET) {
+      logger_default.warn("Unauthorized newsletter send attempt (GET)");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    logger_default.info("Starting weekly newsletter send (via cron GET)");
+    const result = await newsletterService_default.sendWeeklyNewsletter();
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error
+      });
+    }
+    return res.json({
+      success: true,
+      sent: result.sent,
+      failed: result.failed,
+      totalSubscribers: result.totalSubscribers,
+      articlesCount: result.articlesCount
+    });
+  } catch (error) {
+    logger_default.error("Newsletter send error (GET)", void 0, error);
+    return res.status(500).json({ error: "Failed to send newsletter" });
+  }
+});
 app.get("/api/newsletter/preview", requireAuth, async (_req, res) => {
   try {
     const preview = await newsletterService_default.previewNewsletter();
@@ -2539,8 +2666,10 @@ app.post("/api/scrape-rss", async (req, res) => {
   }
 });
 app.get("/api/scrape-rss", async (req, res) => {
-  const secret = req.query.secret;
-  if (secret !== CRON_SECRET) {
+  const authHeader = req.headers.authorization;
+  const providedSecret = authHeader?.replace("Bearer ", "") || req.query.secret;
+  if (providedSecret !== CRON_SECRET) {
+    logger_default.warn("Unauthorized scrape-rss GET attempt");
     return res.status(401).json({ error: "Unauthorized" });
   }
   try {
@@ -3112,6 +3241,42 @@ app.post("/api/admin/rss/articles/:id/edit", requireAuth, async (req, res) => {
   } catch (error) {
     logger_default.error("RSS article edit error", void 0, error);
     return res.status(500).json({ error: "Erreur lors de la modification" });
+  }
+});
+var rssFeedCache = null;
+var RSS_CACHE_TTL_MS = 5 * 60 * 1e3;
+app.get("/rss.xml", async (_req, res) => {
+  try {
+    if (rssFeedCache && Date.now() - rssFeedCache.timestamp < RSS_CACHE_TTL_MS) {
+      res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
+      res.setHeader("X-Cache", "HIT");
+      return res.send(rssFeedCache.data);
+    }
+    const allArticles = await supabaseStorage_default.getPublishedArticles();
+    const articles = allArticles.slice(0, 30);
+    const rssFeed = rssService_default.generateRSSFeed(articles);
+    rssFeedCache = {
+      data: rssFeed,
+      timestamp: Date.now()
+    };
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
+    res.setHeader("X-Cache", "MISS");
+    return res.send(rssFeed);
+  } catch (error) {
+    logger_default.error("RSS feed generation error", void 0, error);
+    const errorFeed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Flash Info Afrique</title>
+    <link>https://flashinfoafrique.com</link>
+    <description>Actualit\xE9 \xE9conomique UEMOA</description>
+    <lastBuildDate>${(/* @__PURE__ */ new Date()).toUTCString()}</lastBuildDate>
+  </channel>
+</rss>`;
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    return res.status(500).send(errorFeed);
   }
 });
 app.get("/sitemap.xml", async (_req, res) => {

@@ -16,6 +16,7 @@ export default function NotFound() {
       <SEO
         title="Page non trouvée"
         description="La page que vous recherchez n'existe pas ou a été déplacée."
+        url="https://flashinfoafrique.com/"
       />
       <Card className="w-full max-w-lg mx-4 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
         <CardContent className="pt-8 pb-8 text-center">
