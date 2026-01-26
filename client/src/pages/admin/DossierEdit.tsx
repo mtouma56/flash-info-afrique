@@ -20,6 +20,7 @@ import {
   Trash2,
   GripVertical,
   Calendar,
+  Star,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useRoute, useLocation } from "wouter";
@@ -55,6 +56,8 @@ export default function DossierEdit() {
     articleIds: string[];
     timelineEvents: TimelineEvent[];
     isActive: boolean;
+    isFeatured?: boolean;
+    order?: number;
   }>({
     title: "",
     slug: "",
@@ -62,6 +65,8 @@ export default function DossierEdit() {
     articleIds: [],
     timelineEvents: [],
     isActive: true,
+    isFeatured: false,
+    order: undefined,
   });
 
   const [autoSlug, setAutoSlug] = useState(true);
@@ -97,6 +102,8 @@ export default function DossierEdit() {
           articleIds: dossier.articleIds,
           timelineEvents: dossier.timelineEvents,
           isActive: dossier.isActive,
+          isFeatured: dossier.isFeatured ?? false,
+          order: dossier.order,
         });
         setAutoSlug(false);
       }
@@ -425,6 +432,45 @@ export default function DossierEdit() {
                     }
                   />
                 </div>
+
+                <div className="flex items-center justify-between mt-4">
+                  <Label htmlFor="isFeatured" className="flex items-center gap-2">
+                    <Star className="h-4 w-4" />
+                    Mettre en vedette
+                  </Label>
+                  <Switch
+                    id="isFeatured"
+                    checked={formData.isFeatured ?? false}
+                    onCheckedChange={(checked) =>
+                      setFormData((prev) => ({ ...prev, isFeatured: checked }))
+                    }
+                  />
+                </div>
+
+                {/* Ordre de priorité - visible uniquement si featured */}
+                {formData.isFeatured && (
+                  <div className="space-y-2 mt-4 pt-4 border-t">
+                    <Label htmlFor="order">Ordre de priorité</Label>
+                    <Input
+                      id="order"
+                      type="number"
+                      min="1"
+                      placeholder="1 = priorité haute"
+                      value={formData.order ?? ""}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          order: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                        }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Les dossiers sont affichés par ordre croissant (1 en premier). 
+                      Laissez vide pour trier par date de mise à jour.
+                    </p>
+                  </div>
+                )}
+
                 <div className={`mt-3 p-2 rounded-md text-xs ${
                   formData.isActive 
                     ? "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400" 

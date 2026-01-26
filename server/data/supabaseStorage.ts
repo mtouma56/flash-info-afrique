@@ -373,7 +373,7 @@ export async function getDossiers(): Promise<Dossier[]> {
   const { data: dossiers, error } = await supabaseAdmin
     .from("dossiers")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("updated_at", { ascending: false });
 
   if (error) {
     console.error("Error fetching dossiers:", error);
@@ -393,7 +393,24 @@ export async function getDossiers(): Promise<Dossier[]> {
     })
   );
 
-  return dossiersWithEvents;
+  // Sort dossiers: featured first (by order), then by updated_at DESC
+  return dossiersWithEvents.sort((a, b) => {
+    // Featured dossiers first
+    if (a.isFeatured && !b.isFeatured) return -1;
+    if (!a.isFeatured && b.isFeatured) return 1;
+    
+    // If both featured or both not featured, sort by order (if available)
+    if (a.isFeatured && b.isFeatured) {
+      if (a.order !== undefined && b.order !== undefined) {
+        return a.order - b.order; // Lower order = higher priority
+      }
+      if (a.order !== undefined) return -1;
+      if (b.order !== undefined) return 1;
+    }
+    
+    // Finally, sort by updated_at DESC
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
 }
 
 export async function getDossier(id: string): Promise<Dossier | undefined> {
@@ -451,6 +468,8 @@ export async function createDossier(
     description: dossierData.description,
     article_ids: dossierData.articleIds || [],
     is_active: dossierData.isActive ?? true,
+    is_featured: dossierData.isFeatured ?? false,
+    order: dossierData.order ?? null,
     created_at: now,
     updated_at: now,
   };
@@ -497,6 +516,8 @@ export async function updateDossier(
   if (dossierUpdates.description !== undefined) dbUpdates.description = dossierUpdates.description;
   if (dossierUpdates.articleIds !== undefined) dbUpdates.article_ids = dossierUpdates.articleIds;
   if (dossierUpdates.isActive !== undefined) dbUpdates.is_active = dossierUpdates.isActive;
+  if (dossierUpdates.isFeatured !== undefined) dbUpdates.is_featured = dossierUpdates.isFeatured;
+  if (dossierUpdates.order !== undefined) dbUpdates.order = dossierUpdates.order ?? null;
 
   const { data, error } = await supabaseAdmin
     .from("dossiers")
@@ -1296,6 +1317,8 @@ function mapDossierFromDb(
       description: evt.description as string,
     })),
     isActive: dbDossier.is_active as boolean,
+    isFeatured: dbDossier.is_featured as boolean | undefined,
+    order: dbDossier.order as number | undefined,
     createdAt: dbDossier.created_at as string,
     updatedAt: dbDossier.updated_at as string,
   };

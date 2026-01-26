@@ -42,10 +42,10 @@ export default function Footer() {
                 </li>
                 <li>
                   <Link
-                    href="/dossier/fidelis"
+                    href="/dossiers"
                     className="text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded"
                   >
-                    Dossier FIDELIS
+                    Dossiers
                   </Link>
                 </li>
                 <li>

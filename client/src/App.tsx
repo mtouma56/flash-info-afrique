@@ -14,6 +14,7 @@ import ProtectedRoute from "./pages/admin/ProtectedRoute";
 // Lazy load public pages for code splitting
 const Home = lazy(() => import("./pages/Home"));
 const Articles = lazy(() => import("./pages/Articles"));
+const Dossiers = lazy(() => import("./pages/Dossiers"));
 const Dossier = lazy(() => import("./pages/Dossier"));
 const Article = lazy(() => import("./pages/Article"));
 const Category = lazy(() => import("./pages/Category"));
@@ -55,6 +56,7 @@ function Router() {
         {/* Public routes */}
         <Route path="/" component={Home} />
         <Route path="/articles" component={Articles} />
+        <Route path="/dossiers" component={Dossiers} />
         <Route path="/dossier/:slug" component={Dossier} />
         <Route path="/article/:slug" component={Article} />
         <Route path="/categorie/:slug" component={Category} />

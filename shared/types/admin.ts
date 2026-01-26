@@ -43,6 +43,8 @@ export interface Dossier {
   createdAt: string;
   updatedAt: string;
   isActive: boolean;
+  isFeatured?: boolean;  // Nouveau : pour mettre en vedette sur la page d'accueil
+  order?: number;        // Nouveau : ordre d'affichage (1 = priorité haute)
 }
 
 export interface TimelineEvent {

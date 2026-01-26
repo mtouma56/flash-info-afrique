@@ -31,6 +31,7 @@ import {
   Trash2,
   Calendar,
   FolderOpen,
+  Star,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
@@ -177,6 +178,12 @@ export default function AdminDossiers() {
                         <CardTitle className="text-lg truncate">
                           {dossier.title}
                         </CardTitle>
+                        {dossier.isFeatured && (
+                          <Badge variant="default" className="shrink-0">
+                            <Star className="h-3 w-3 mr-1" />
+                            En vedette
+                          </Badge>
+                        )}
                         {!dossier.isActive && (
                           <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800 dark:text-orange-400">
                             <EyeOff className="h-3 w-3 mr-1" />

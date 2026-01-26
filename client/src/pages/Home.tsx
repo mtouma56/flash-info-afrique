@@ -9,15 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useArticles } from "@/hooks/useArticles";
-import { useDossier } from "@/hooks/useDossiers";
-import { AlertCircle, ArrowRight, Loader2, Mail, TrendingUp, CheckCircle, XCircle } from "lucide-react";
+import { useDossiers } from "@/hooks/useDossiers";
+import { AlertCircle, ArrowRight, Calendar, FileText, FolderOpen, Loader2, Mail, Star, TrendingUp, CheckCircle, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 
 export default function Home() {
   const { articles, categories, isLoading } = useArticles();
-  const { dossier: fidelisDossier } = useDossier("fidelis");
+  const { dossiers } = useDossiers();
   const [email, setEmail] = useState("");
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -106,18 +106,43 @@ export default function Home() {
     setDisplayedCount((prev) => prev + 6);
   };
 
-  // Articles FIDELIS pour l'encart spécial
-  // Uses same logic as Dossier page: check articleIds OR tag matching
-  const fidelisArticles = useMemo(() => {
-    return articles.filter((a) =>
-      (fidelisDossier?.articleIds?.includes(a.id)) ||
-      a.tags.some(tag => 
-        tag === "FIDELIS" || 
-        tag === "FIDELIS Finance" || 
-        tag.toLowerCase().includes("fidelis")
-      )
+  // Dossiers en vedette (featured)
+  const featuredDossiers = useMemo(() => {
+    return dossiers
+      .filter(d => d.isFeatured && d.isActive)
+      .sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        if (a.order !== undefined) return -1;
+        if (b.order !== undefined) return 1;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+  }, [dossiers]);
+
+  // Dossiers récents (non-featured, pour la grille)
+  const recentDossiers = useMemo(() => {
+    return dossiers
+      .filter(d => d.isActive && !d.isFeatured)
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, 4); // Maximum 4 dossiers récents
+  }, [dossiers]);
+
+  // Get articles for a specific dossier
+  const getDossierArticles = (dossierSlug: string, articleIds: string[]) => {
+    return articles.filter((a) => 
+      articleIds.includes(a.id) ||
+      a.tags.some(tag => tag.toLowerCase().includes(dossierSlug.toLowerCase()))
     );
-  }, [articles, fidelisDossier]);
+  };
+
+  // Calculate total timeline events across all dossiers
+  const totalTimelineEvents = useMemo(() => {
+    return dossiers.reduce((sum, d) => sum + (d.timelineEvents?.length || 0), 0);
+  }, [dossiers]);
+
+  // Active dossiers count
+  const activeDossiersCount = useMemo(() => {
+    return dossiers.filter(d => d.isActive).length;
+  }, [dossiers]);
 
   const handleNewsletterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,45 +214,108 @@ export default function Home() {
           </section>
         )}
 
-        {/* Dossier FIDELIS - Encart spécial */}
-        <section className="bg-gradient-to-br from-primary/5 to-secondary/5 py-8 sm:py-12 border-y border-border" aria-labelledby="fidelis-heading">
-          <div className="container">
-            <div className="flex items-start sm:items-center gap-3 mb-4 sm:mb-6">
-              <AlertCircle className="h-6 w-6 text-secondary" aria-hidden="true" />
-              <h2 id="fidelis-heading" className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground font-['Sora']">
-                Dossier spécial : FIDELIS Finance Burkina Faso
-              </h2>
-            </div>
-            <p className="text-muted-foreground mb-4 max-w-3xl">
-              Suivez l'évolution du dossier <strong>FIDELIS Finance</strong>, établissement financier 
-              basé au <strong>Burkina Faso</strong> avec une succursale à <strong>Abidjan</strong>, 
-              accusé de violation du secret bancaire en <strong>Côte d'Ivoire</strong>. 
-              Un cas inédit qui pourrait créer la première jurisprudence pénale en la matière dans l'UEMOA.
-            </p>
-            <p className="text-sm text-muted-foreground mb-8 max-w-3xl">
-              Cette affaire oppose la PME ivoirienne SOGETRA à Fidelis Finance Abidjan et 
-              Fidelis Finance Côte d'Ivoire. Quatre dirigeants sont mis en examen pour 
-              violation présumée du secret bancaire, destruction de preuves et subornation de témoin.
-            </p>
+        {/* Dossiers d'investigation */}
+        {(featuredDossiers.length > 0 || recentDossiers.length > 0) && (
+          <section className="bg-gradient-to-br from-primary/5 to-secondary/5 py-8 sm:py-12 border-y border-border" aria-labelledby="dossiers-heading">
+            <div className="container">
+              {/* Dossier en vedette */}
+              {featuredDossiers.length > 0 && (
+                <div className="mb-8 sm:mb-12">
+                  <div className="flex items-start sm:items-center gap-3 mb-4 sm:mb-6">
+                    <Star className="h-6 w-6 text-primary" aria-hidden="true" />
+                    <h2 id="dossiers-heading" className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground font-['Sora']">
+                      Dossier en vedette
+                    </h2>
+                  </div>
+                  {featuredDossiers.slice(0, 1).map((dossier) => {
+                    const dossierArticles = getDossierArticles(dossier.slug, dossier.articleIds);
+                    return (
+                      <div key={dossier.id}>
+                        <p className="text-muted-foreground mb-4 max-w-3xl">
+                          {dossier.description}
+                        </p>
+                        {dossier.timelineEvents.length > 0 && (
+                          <p className="text-sm text-muted-foreground mb-8 max-w-3xl">
+                            {dossier.timelineEvents.length} événement{dossier.timelineEvents.length > 1 ? "s" : ""} dans la chronologie.
+                          </p>
+                        )}
 
-            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8 min-w-0">
-              {fidelisArticles.slice(0, 3).map((article) => (
-                <div key={article.id} className="min-w-0">
-                  <ArticleCard article={article} />
+                        {dossierArticles.length > 0 && (
+                          <>
+                            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8 min-w-0">
+                              {dossierArticles.slice(0, 3).map((article) => (
+                                <div key={article.id} className="min-w-0">
+                                  <ArticleCard article={article} />
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="flex justify-center">
+                              <Link href={`/dossier/${dossier.slug}`}>
+                                <Button size="lg" className="group">
+                                  Voir tous les articles du dossier
+                                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                                </Button>
+                              </Link>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              )}
 
-            <div className="flex justify-center">
-              <Link href="/dossier/fidelis">
-                <Button size="lg" className="group">
-                  Voir tous les articles du dossier
-                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
-                </Button>
-              </Link>
+              {/* Dossiers récents */}
+              {recentDossiers.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-6">
+                    <FolderOpen className="h-5 w-5 text-primary" aria-hidden="true" />
+                    <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground font-['Sora']">
+                      Autres dossiers d'investigation
+                    </h3>
+                  </div>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                    {recentDossiers.map((dossier) => (
+                      <Link key={dossier.id} href={`/dossier/${dossier.slug}`}>
+                        <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer group">
+                          <CardContent className="p-4 sm:p-5">
+                            <h4 className="text-base sm:text-lg font-bold text-foreground mb-2 group-hover:text-primary transition-colors line-clamp-2">
+                              {dossier.title}
+                            </h4>
+                            <p className="text-xs sm:text-sm text-muted-foreground mb-3 line-clamp-3">
+                              {dossier.description}
+                            </p>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <FileText className="h-3 w-3" />
+                                {dossier.articleIds.length}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {new Date(dossier.updatedAt).toLocaleDateString("fr-FR", { month: "short", year: "numeric" })}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    ))}
+                  </div>
+                  {dossiers.filter(d => d.isActive && !d.isFeatured).length > 4 && (
+                    <div className="flex justify-center mt-6">
+                      <Link href="/dossiers">
+                        <Button variant="outline" size="lg" className="group">
+                          Voir tous les dossiers
+                          <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Dernières actualités */}
         <section className="container py-8 sm:py-12" aria-labelledby="news-heading">
@@ -381,19 +469,19 @@ export default function Home() {
             <Card>
               <CardContent className="p-4 sm:p-6 text-center">
                 <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-primary mb-1 sm:mb-2 font-['Sora']">
-                  {fidelisArticles.length}+
+                  {activeDossiersCount}+
                 </div>
                 <p className="text-xs sm:text-sm text-muted-foreground">
-                  Articles sur FIDELIS
+                  Dossiers d'investigation
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 sm:p-6 text-center">
                 <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-secondary mb-1 sm:mb-2 font-['Sora']">
-                  {new Set(articles.map((a) => a.source.name)).size}
+                  {totalTimelineEvents}+
                 </div>
-                <p className="text-xs sm:text-sm text-muted-foreground">Médias sources</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Événements suivis</p>
               </CardContent>
             </Card>
             <Card>

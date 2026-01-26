@@ -308,7 +308,7 @@ async function deleteCategory(id) {
   return true;
 }
 async function getDossiers() {
-  const { data: dossiers, error } = await supabaseAdmin.from("dossiers").select("*").order("created_at", { ascending: false });
+  const { data: dossiers, error } = await supabaseAdmin.from("dossiers").select("*").order("updated_at", { ascending: false });
   if (error) {
     console.error("Error fetching dossiers:", error);
     return [];
@@ -319,7 +319,18 @@ async function getDossiers() {
       return mapDossierFromDb(dossier, events || []);
     })
   );
-  return dossiersWithEvents;
+  return dossiersWithEvents.sort((a, b) => {
+    if (a.isFeatured && !b.isFeatured) return -1;
+    if (!a.isFeatured && b.isFeatured) return 1;
+    if (a.isFeatured && b.isFeatured) {
+      if (a.order !== void 0 && b.order !== void 0) {
+        return a.order - b.order;
+      }
+      if (a.order !== void 0) return -1;
+      if (b.order !== void 0) return 1;
+    }
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
 }
 async function getDossier(id) {
   const { data: dossier, error } = await supabaseAdmin.from("dossiers").select("*").eq("id", id).single();
@@ -348,6 +359,8 @@ async function createDossier(dossier) {
     description: dossierData.description,
     article_ids: dossierData.articleIds || [],
     is_active: dossierData.isActive ?? true,
+    is_featured: dossierData.isFeatured ?? false,
+    order: dossierData.order ?? null,
     created_at: now,
     updated_at: now
   };
@@ -379,6 +392,8 @@ async function updateDossier(id, updates) {
   if (dossierUpdates.description !== void 0) dbUpdates.description = dossierUpdates.description;
   if (dossierUpdates.articleIds !== void 0) dbUpdates.article_ids = dossierUpdates.articleIds;
   if (dossierUpdates.isActive !== void 0) dbUpdates.is_active = dossierUpdates.isActive;
+  if (dossierUpdates.isFeatured !== void 0) dbUpdates.is_featured = dossierUpdates.isFeatured;
+  if (dossierUpdates.order !== void 0) dbUpdates.order = dossierUpdates.order ?? null;
   const { data, error } = await supabaseAdmin.from("dossiers").update(dbUpdates).eq("id", id).select().single();
   if (error || !data) {
     console.error("Error updating dossier:", error);
@@ -853,6 +868,8 @@ function mapDossierFromDb(dbDossier, dbEvents) {
       description: evt.description
     })),
     isActive: dbDossier.is_active,
+    isFeatured: dbDossier.is_featured,
+    order: dbDossier.order,
     createdAt: dbDossier.created_at,
     updatedAt: dbDossier.updated_at
   };

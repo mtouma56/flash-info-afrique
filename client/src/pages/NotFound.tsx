@@ -1,7 +1,8 @@
 import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertCircle, Home, Search } from "lucide-react";
+import { AlertCircle, FolderOpen, Home } from "lucide-react";
+import { Helmet } from "react-helmet-async";
 import { Link, useLocation } from "wouter";
 
 export default function NotFound() {
@@ -12,28 +13,33 @@ export default function NotFound() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <SEO
         title="Page non trouvée"
         description="La page que vous recherchez n'existe pas ou a été déplacée."
         url="https://flashinfoafrique.com/"
       />
-      <Card className="w-full max-w-lg mx-4 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+      {/* Add noindex for 404 pages to prevent SEO issues */}
+      <Helmet>
+        <meta name="robots" content="noindex, nofollow" />
+        <meta name="prerender-status-code" content="404" />
+      </Helmet>
+      <Card className="w-full max-w-lg mx-4 shadow-lg border-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
         <CardContent className="pt-8 pb-8 text-center">
           <div className="flex justify-center mb-6">
             <div className="relative">
-              <div className="absolute inset-0 bg-red-100 rounded-full animate-pulse" />
+              <div className="absolute inset-0 bg-red-100 dark:bg-red-900/30 rounded-full animate-pulse" />
               <AlertCircle className="relative h-16 w-16 text-red-500" aria-hidden="true" />
             </div>
           </div>
 
-          <h1 className="text-4xl font-bold text-slate-900 mb-2 font-['Sora']">404</h1>
+          <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-2 font-['Sora']">404</h1>
 
-          <h2 className="text-xl font-semibold text-slate-700 mb-4">
+          <h2 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-4">
             Page non trouvée
           </h2>
 
-          <p className="text-slate-600 mb-8 leading-relaxed">
+          <p className="text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
             Désolé, la page que vous recherchez n'existe pas.
             <br />
             Elle a peut-être été déplacée ou supprimée.
@@ -47,13 +53,13 @@ export default function NotFound() {
               <Home className="w-4 h-4 mr-2" aria-hidden="true" />
               Retour à l'accueil
             </Button>
-            <Link href="/dossier/fidelis">
+            <Link href="/dossiers">
               <Button
                 variant="outline"
                 className="px-6 py-2.5 rounded-lg transition-all duration-200"
               >
-                <Search className="w-4 h-4 mr-2" aria-hidden="true" />
-                Voir le dossier FIDELIS
+                <FolderOpen className="w-4 h-4 mr-2" aria-hidden="true" />
+                Voir les dossiers
               </Button>
             </Link>
           </div>

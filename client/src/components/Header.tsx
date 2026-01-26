@@ -23,7 +23,7 @@ export default function Header() {
   const navigation = [
     { name: "Accueil", href: "/" },
     { name: "Tous les articles", href: "/articles" },
-    { name: "Dossier FIDELIS", href: "/dossier/fidelis" },
+    { name: "Dossiers", href: "/dossiers" },
     { name: "Banque & Finance", href: "/categorie/banque-finance" },
     { name: "Régulation", href: "/categorie/regulation-conformite" },
     { name: "Marchés", href: "/categorie/marches-investissements" },
