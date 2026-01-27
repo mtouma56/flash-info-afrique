@@ -26,19 +26,7 @@ import type { DashboardStats } from "@shared/types/admin";
 import { useAuthFetch } from "@/contexts/AuthContext";
 
 export default function AdminDashboard() {
-  // #region agent log
-  console.log("[DASHBOARD] Component rendering");
-  if (typeof window !== 'undefined') {
-    fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:28',message:'Dashboard component render',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-  }
-  // #endregion
   const authFetch = useAuthFetch();
-  // #region agent log
-  console.log("[DASHBOARD] useAuthFetch called", { hasAuthFetch: !!authFetch });
-  if (typeof window !== 'undefined') {
-    fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:30',message:'after useAuthFetch',data:{hasAuthFetch:!!authFetch},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-  }
-  // #endregion
   const [stats, setStats] = useState<DashboardStats>({
     totalArticles: 0,
     publishedArticles: 0,
@@ -55,32 +43,16 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const fetchStats = async () => {
-      // #region agent log
-      console.log("[DASHBOARD] fetchStats starting");
-      fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:45',message:'fetchStats start',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-      // #endregion
       try {
-        // #region agent log
-        console.log("[DASHBOARD] Calling authFetch('/api/admin/stats')");
-        fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:47',message:'before authFetch call',data:{url:'/api/admin/stats'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-        // #endregion
         const response = await authFetch("/api/admin/stats");
-        // #region agent log
-        console.log("[DASHBOARD] authFetch response", { status: response.status, ok: response.ok });
-        fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:48',message:'after authFetch call',data:{status:response.status,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-        // #endregion
         if (response.ok) {
           const data = await response.json();
           setStats(data);
-          console.log("[DASHBOARD] Stats loaded successfully");
         } else {
           console.error("[DASHBOARD] Stats API returned error", { status: response.status });
         }
       } catch (error) {
         console.error("[DASHBOARD] Error fetching stats:", error);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/a1d61db1-cb31-40e2-8e3d-081974469abb',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:53',message:'fetchStats catch error',data:{error:error instanceof Error?error.message:String(error),errorName:error instanceof Error?error.name:null,stack:error instanceof Error?error.stack:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-        // #endregion
       } finally {
         setIsLoading(false);
       }

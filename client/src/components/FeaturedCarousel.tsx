@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Autoplay from "embla-carousel-autoplay";
 import {
   Carousel,
@@ -8,9 +8,11 @@ import {
   CarouselPrevious,
   type CarouselApi,
 } from "@/components/ui/carousel";
+import { Button } from "@/components/ui/button";
 import ArticleCard from "@/components/ArticleCard";
 import type { Article } from "@/hooks/useArticles";
 import { cn } from "@/lib/utils";
+import { Pause, Play } from "lucide-react";
 
 interface FeaturedCarouselProps {
   articles: Article[];
@@ -24,6 +26,7 @@ export default function FeaturedCarousel({
   const [api, setApi] = useState<CarouselApi>();
   const [current, setCurrent] = useState(0);
   const [count, setCount] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
 
   // Plugin autoplay avec pause au survol
   const autoplayPlugin = useMemo(
@@ -35,6 +38,24 @@ export default function FeaturedCarousel({
       }),
     [autoplayInterval]
   );
+
+  // Reference to autoplay plugin for control
+  const autoplayRef = useRef(autoplayPlugin);
+  autoplayRef.current = autoplayPlugin;
+
+  // Toggle autoplay
+  const toggleAutoplay = useCallback(() => {
+    const autoplay = autoplayRef.current;
+    if (!autoplay) return;
+
+    if (isPlaying) {
+      autoplay.stop();
+      setIsPlaying(false);
+    } else {
+      autoplay.play();
+      setIsPlaying(true);
+    }
+  }, [isPlaying]);
 
   // Mettre à jour l'index courant quand le carousel change
   const onSelect = useCallback(() => {
@@ -97,21 +118,37 @@ export default function FeaturedCarousel({
 
         {/* Boutons de navigation - positionnés à l'intérieur */}
         <CarouselPrevious
-          className="absolute left-1 sm:left-4 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background border-border shadow-lg h-8 w-8 sm:h-8 sm:w-8"
+          className="absolute left-1 sm:left-4 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background border-border shadow-lg h-10 w-10 sm:h-11 sm:w-11 min-h-[44px] min-w-[44px]"
           aria-label="Article précédent"
         />
         <CarouselNext
-          className="absolute right-1 sm:right-4 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background border-border shadow-lg h-8 w-8 sm:h-8 sm:w-8"
+          className="absolute right-1 sm:right-4 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background border-border shadow-lg h-10 w-10 sm:h-11 sm:w-11 min-h-[44px] min-w-[44px]"
           aria-label="Article suivant"
         />
       </Carousel>
 
-      {/* Indicateurs de pagination (dots) */}
+      {/* Indicateurs de pagination (dots) + Play/Pause control */}
       <div
-        className="flex justify-center gap-2 mt-3 sm:mt-4 flex-wrap"
+        className="flex justify-center items-center gap-2 mt-3 sm:mt-4 flex-wrap"
         role="tablist"
         aria-label="Navigation des articles en vedette"
       >
+        {/* Play/Pause button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleAutoplay}
+          className="h-8 w-8 rounded-full bg-muted/50 hover:bg-muted"
+          aria-label={isPlaying ? "Mettre en pause le défilement automatique" : "Reprendre le défilement automatique"}
+        >
+          {isPlaying ? (
+            <Pause className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <Play className="h-3.5 w-3.5 ml-0.5" aria-hidden="true" />
+          )}
+        </Button>
+
+        {/* Pagination dots */}
         {Array.from({ length: count }).map((_, index) => (
           <button
             key={index}

@@ -162,7 +162,7 @@ export default function Dossier() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/5 py-8 border-b border-border" aria-labelledby="dossier-title">
+        <section className="bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/5 py-6 border-b border-border" aria-labelledby="dossier-title">
           <div className="container">
             <div className="max-w-4xl mx-auto text-center">
               <div className="flex justify-center mb-4">
@@ -196,9 +196,9 @@ export default function Dossier() {
 
         {/* Chronologie interactive */}
         {dossier.timelineEvents.length > 0 && (
-          <section className="bg-muted/30 py-12">
+          <section className="bg-muted/30 py-8">
             <div className="container">
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground mb-8 text-center font-['Sora']">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground mb-6 text-center font-['Sora']">
                 Chronologie des événements
               </h2>
               <div className="max-w-4xl mx-auto">
@@ -254,8 +254,8 @@ export default function Dossier() {
         )}
 
         {/* Tous les articles */}
-        <section className="container py-8 sm:py-12">
-          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground mb-6 sm:mb-8 font-['Sora']">
+        <section className="container py-6 sm:py-8">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground mb-4 sm:mb-6 font-['Sora']">
             Tous les articles ({dossierArticles.length})
           </h2>
           {dossierArticles.length > 0 ? (
@@ -278,10 +278,10 @@ export default function Dossier() {
 
         {/* FAQ Section for FIDELIS dossier */}
         {isFidelisDossier && faqItems && (
-          <section className="bg-muted/30 py-8 sm:py-12" aria-labelledby="faq-heading">
+          <section className="bg-muted/30 py-6 sm:py-8" aria-labelledby="faq-heading">
             <div className="container">
               <div className="max-w-4xl mx-auto">
-                <div className="flex items-start sm:items-center gap-3 mb-6 sm:mb-8">
+                <div className="flex items-start sm:items-center gap-3 mb-4 sm:mb-6">
                   <HelpCircle className="h-6 w-6 text-primary" aria-hidden="true" />
                   <h2 id="faq-heading" className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground font-['Sora']">
                     Questions fréquentes sur FIDELIS Finance
@@ -307,7 +307,7 @@ export default function Dossier() {
         )}
 
         {/* Disclaimer */}
-        <section className="container py-8">
+        <section className="container py-6">
           <Card className="bg-muted/50 border-dashed">
             <CardContent className="p-6 text-center">
               <p className="text-sm text-muted-foreground">

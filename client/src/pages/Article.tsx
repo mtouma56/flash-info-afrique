@@ -3,6 +3,7 @@ import Header from "@/components/Header";
 import OptimizedImage from "@/components/OptimizedImage";
 import SEO, { calculateReadingTime, extractGeoKeywords, generateEnhancedKeywords } from "@/components/SEO";
 import StructuredData from "@/components/StructuredData";
+import TableOfContents, { generateContentWithIds } from "@/components/TableOfContents";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -82,6 +83,12 @@ export default function Article() {
   const readingTime = useMemo(() => {
     if (!article) return 0;
     return calculateReadingTime(article.content + article.excerpt);
+  }, [article]);
+
+  // Generate content with IDs for TOC
+  const contentWithIds = useMemo(() => {
+    if (!article) return { paragraphs: [] };
+    return generateContentWithIds(article.content);
   }, [article]);
 
   // Articles liés (même catégorie)
@@ -212,7 +219,7 @@ export default function Article() {
         </div>
 
         {/* Article Header */}
-        <article className="container py-8">
+        <article className="container py-6">
           <div className="max-w-4xl mx-auto">
             {/* Meta */}
             <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -248,7 +255,7 @@ export default function Article() {
             </p>
 
             {/* Share buttons */}
-            <div className="flex flex-wrap items-center gap-2 mb-6 sm:mb-8">
+            <div className="flex flex-wrap items-center gap-2 mb-4 sm:mb-6">
               <span className="text-sm text-muted-foreground mr-2 w-full sm:w-auto mb-2 sm:mb-0">
                 Partager :
               </span>
@@ -293,7 +300,7 @@ export default function Article() {
             </div>
 
             {/* Featured Image */}
-            <div className="relative h-[250px] sm:h-[350px] md:h-[400px] rounded-xl overflow-hidden mb-6 sm:mb-8">
+            <div className="relative h-[250px] sm:h-[350px] md:h-[400px] rounded-xl overflow-hidden mb-4 sm:mb-6">
               <OptimizedImage
                 src={article.imageUrl}
                 alt={`Image illustrant l'article: ${article.title}`}
@@ -305,7 +312,7 @@ export default function Article() {
             </div>
 
             {/* Source originale */}
-            <Card className="mb-8 border-l-4 border-l-secondary bg-secondary/5">
+            <Card className="mb-6 border-l-4 border-l-secondary bg-secondary/5">
               <CardContent className="p-6">
                 <div className="flex items-start gap-4">
                   <ExternalLink className="h-5 w-5 text-secondary mt-1 flex-shrink-0" aria-hidden="true" />
@@ -332,20 +339,35 @@ export default function Article() {
               </CardContent>
             </Card>
 
-            {/* Content */}
-            <div className="prose prose-lg prose-gray max-w-none mb-12">
-              {article.content.split("\n\n").map((paragraph, index) => (
-                <p
-                  key={index}
-                  className="text-foreground leading-relaxed mb-6"
-                >
-                  {paragraph}
-                </p>
-              ))}
+            {/* Content with optional TOC sidebar */}
+            <div className="lg:grid lg:grid-cols-[1fr_220px] lg:gap-8 mb-8">
+              {/* Main content */}
+              <div className="prose prose-lg prose-gray max-w-none">
+                {contentWithIds.paragraphs.map((paragraph, index) => (
+                  <p
+                    key={index}
+                    id={paragraph.id}
+                    className="text-foreground leading-relaxed mb-6"
+                  >
+                    {paragraph.text}
+                  </p>
+                ))}
+              </div>
+
+              {/* Table of Contents sidebar (desktop only) */}
+              <aside className="hidden lg:block" aria-label="Table des matières">
+                <div className="sticky top-24">
+                  <TableOfContents
+                    content={article.content}
+                    readingTime={readingTime}
+                    minReadingTime={5}
+                  />
+                </div>
+              </aside>
             </div>
 
             {/* Tags */}
-            <div className="flex flex-wrap gap-2 mb-8" role="list" aria-label="Tags de l'article">
+            <div className="flex flex-wrap gap-2 mb-6" role="list" aria-label="Tags de l'article">
               {article.tags.map((tag) => (
                 <Badge key={tag} variant="secondary" role="listitem">
                   {tag}
@@ -353,7 +375,7 @@ export default function Article() {
               ))}
             </div>
 
-            <Separator className="my-8" />
+            <Separator className="my-6" />
 
             {/* Share buttons (bottom) */}
             <div className="flex flex-wrap items-center justify-between gap-4 py-6">
@@ -398,7 +420,7 @@ export default function Article() {
 
         {/* Related Articles */}
         {relatedArticles.length > 0 && (
-          <section className="bg-muted/30 py-8 sm:py-12 border-t border-border" aria-labelledby="related-articles-heading">
+          <section className="bg-muted/30 py-6 sm:py-8 border-t border-border" aria-labelledby="related-articles-heading">
             <div className="container">
               <h2 id="related-articles-heading" className="text-xl sm:text-2xl font-bold text-foreground mb-4 sm:mb-6 font-['Sora']">
                 Articles liés

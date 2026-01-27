@@ -2,12 +2,15 @@ import ArticleCard from "@/components/ArticleCard";
 import FeaturedCarousel from "@/components/FeaturedCarousel";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import NewsletterBar from "@/components/NewsletterBar";
+import NewsletterWidget from "@/components/NewsletterWidget";
 import SEO from "@/components/SEO";
 import StructuredData from "@/components/StructuredData";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useArticles } from "@/hooks/useArticles";
 import { useDossiers } from "@/hooks/useDossiers";
 import { AlertCircle, ArrowRight, Calendar, FileText, FolderOpen, Loader2, Mail, Star, TrendingUp, CheckCircle, XCircle } from "lucide-react";
@@ -17,7 +20,7 @@ import { Link } from "wouter";
 
 export default function Home() {
   const { articles, categories, isLoading } = useArticles();
-  const { dossiers } = useDossiers();
+  const { dossiers, isLoading: isDossiersLoading } = useDossiers();
   const [email, setEmail] = useState("");
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -209,117 +212,173 @@ export default function Home() {
 
         {/* Hero Section - Featured Articles Carousel */}
         {featuredArticles.length > 0 && (
-          <section id="main-content" className="container py-8" aria-label="Articles à la une">
+          <section id="main-content" className="container section-hero" aria-label="Articles à la une">
             <FeaturedCarousel articles={featuredArticles} />
           </section>
         )}
 
+        {/* Newsletter Bar - Compact inline newsletter after hero */}
+        <NewsletterBar />
+
         {/* Dossiers d'investigation */}
-        {(featuredDossiers.length > 0 || recentDossiers.length > 0) && (
-          <section className="bg-gradient-to-br from-primary/5 to-secondary/5 py-8 sm:py-12 border-y border-border" aria-labelledby="dossiers-heading">
+        {(isDossiersLoading || featuredDossiers.length > 0 || recentDossiers.length > 0) && (
+          <section className="bg-gradient-to-br from-primary/5 to-secondary/5 section-default border-y border-border" aria-labelledby="dossiers-heading">
             <div className="container">
-              {/* Dossier en vedette */}
-              {featuredDossiers.length > 0 && (
-                <div className="mb-8 sm:mb-12">
-                  <div className="flex items-start sm:items-center gap-3 mb-4 sm:mb-6">
+              {/* Skeleton loading state */}
+              {isDossiersLoading ? (
+                <div>
+                  <div className="flex items-start sm:items-center gap-3 mb-3 sm:mb-4">
                     <Star className="h-6 w-6 text-primary" aria-hidden="true" />
                     <h2 id="dossiers-heading" className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground font-['Sora']">
-                      Dossier en vedette
+                      Dossiers d'investigation
                     </h2>
                   </div>
-                  {featuredDossiers.slice(0, 1).map((dossier) => {
-                    const dossierArticles = getDossierArticles(dossier.slug, dossier.articleIds);
-                    return (
-                      <div key={dossier.id}>
-                        <p className="text-muted-foreground mb-4 max-w-3xl">
-                          {dossier.description}
-                        </p>
-                        {dossier.timelineEvents.length > 0 && (
-                          <p className="text-sm text-muted-foreground mb-8 max-w-3xl">
-                            {dossier.timelineEvents.length} événement{dossier.timelineEvents.length > 1 ? "s" : ""} dans la chronologie.
-                          </p>
-                        )}
-
-                        {dossierArticles.length > 0 && (
-                          <>
-                            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8 min-w-0">
-                              {dossierArticles.slice(0, 3).map((article) => (
-                                <div key={article.id} className="min-w-0">
-                                  <ArticleCard article={article} />
-                                </div>
-                              ))}
-                            </div>
-
-                            <div className="flex justify-center">
-                              <Link href={`/dossier/${dossier.slug}`}>
-                                <Button size="lg" className="group">
-                                  Voir tous les articles du dossier
-                                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
-                                </Button>
-                              </Link>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Dossiers récents */}
-              {recentDossiers.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-6">
+                  <Skeleton className="h-4 w-3/4 mb-3" />
+                  <Skeleton className="h-3 w-1/2 mb-6" />
+                  <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
+                    {[1, 2, 3].map((i) => (
+                      <Card key={i} className="overflow-hidden">
+                        <Skeleton className="h-48 w-full" />
+                        <CardContent className="p-4">
+                          <Skeleton className="h-4 w-20 mb-3" />
+                          <Skeleton className="h-5 w-full mb-2" />
+                          <Skeleton className="h-5 w-3/4 mb-3" />
+                          <Skeleton className="h-3 w-full mb-2" />
+                          <Skeleton className="h-3 w-2/3" />
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 mb-4 mt-6">
                     <FolderOpen className="h-5 w-5 text-primary" aria-hidden="true" />
                     <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground font-['Sora']">
-                      Autres dossiers d'investigation
+                      Autres dossiers
                     </h3>
                   </div>
                   <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                    {recentDossiers.map((dossier) => (
-                      <Link key={dossier.id} href={`/dossier/${dossier.slug}`}>
-                        <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer group">
-                          <CardContent className="p-4 sm:p-5">
-                            <h4 className="text-base sm:text-lg font-bold text-foreground mb-2 group-hover:text-primary transition-colors line-clamp-2">
-                              {dossier.title}
-                            </h4>
-                            <p className="text-xs sm:text-sm text-muted-foreground mb-3 line-clamp-3">
-                              {dossier.description}
-                            </p>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                              <div className="flex items-center gap-1">
-                                <FileText className="h-3 w-3" />
-                                {dossier.articleIds.length}
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {new Date(dossier.updatedAt).toLocaleDateString("fr-FR", { month: "short", year: "numeric" })}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </Link>
+                    {[1, 2, 3, 4].map((i) => (
+                      <Card key={i}>
+                        <CardContent className="p-4 sm:p-5">
+                          <Skeleton className="h-5 w-full mb-2" />
+                          <Skeleton className="h-5 w-3/4 mb-3" />
+                          <Skeleton className="h-3 w-full mb-2" />
+                          <Skeleton className="h-3 w-full mb-2" />
+                          <Skeleton className="h-3 w-2/3 mb-3" />
+                          <div className="flex items-center gap-3">
+                            <Skeleton className="h-3 w-8" />
+                            <Skeleton className="h-3 w-16" />
+                          </div>
+                        </CardContent>
+                      </Card>
                     ))}
                   </div>
-                  {dossiers.filter(d => d.isActive && !d.isFeatured).length > 4 && (
-                    <div className="flex justify-center mt-6">
-                      <Link href="/dossiers">
-                        <Button variant="outline" size="lg" className="group">
-                          Voir tous les dossiers
-                          <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
-                        </Button>
-                      </Link>
+                </div>
+              ) : (
+                <>
+                  {/* Dossier en vedette */}
+                  {featuredDossiers.length > 0 && (
+                    <div className="mb-6 sm:mb-8">
+                      <div className="flex items-start sm:items-center gap-3 mb-3 sm:mb-4">
+                        <Star className="h-6 w-6 text-primary" aria-hidden="true" />
+                        <h2 id="dossiers-heading" className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground font-['Sora']">
+                          Dossier en vedette
+                        </h2>
+                      </div>
+                      {featuredDossiers.slice(0, 1).map((dossier) => {
+                        const dossierArticles = getDossierArticles(dossier.slug, dossier.articleIds);
+                        return (
+                          <div key={dossier.id}>
+                            <p className="text-muted-foreground mb-3 max-w-3xl">
+                              {dossier.description}
+                            </p>
+                            {dossier.timelineEvents.length > 0 && (
+                              <p className="text-sm text-muted-foreground mb-5 max-w-3xl">
+                                {dossier.timelineEvents.length} événement{dossier.timelineEvents.length > 1 ? "s" : ""} dans la chronologie.
+                              </p>
+                            )}
+
+                            {dossierArticles.length > 0 && (
+                              <>
+                                <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6 min-w-0">
+                                  {dossierArticles.slice(0, 3).map((article) => (
+                                    <div key={article.id} className="min-w-0">
+                                      <ArticleCard article={article} />
+                                    </div>
+                                  ))}
+                                </div>
+
+                                <div className="flex justify-center">
+                                  <Link href={`/dossier/${dossier.slug}`}>
+                                    <Button size="lg" className="group">
+                                      Voir tous les articles du dossier
+                                      <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                                    </Button>
+                                  </Link>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
-                </div>
+
+                  {/* Dossiers récents */}
+                  {recentDossiers.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-4">
+                        <FolderOpen className="h-5 w-5 text-primary" aria-hidden="true" />
+                        <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground font-['Sora']">
+                          Autres dossiers d'investigation
+                        </h3>
+                      </div>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                        {recentDossiers.map((dossier) => (
+                          <Link key={dossier.id} href={`/dossier/${dossier.slug}`}>
+                            <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer group">
+                              <CardContent className="p-4 sm:p-5">
+                                <h4 className="text-base sm:text-lg font-bold text-foreground mb-2 group-hover:text-primary transition-colors line-clamp-2">
+                                  {dossier.title}
+                                </h4>
+                                <p className="text-xs sm:text-sm text-muted-foreground mb-3 line-clamp-3">
+                                  {dossier.description}
+                                </p>
+                                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                  <div className="flex items-center gap-1">
+                                    <FileText className="h-3 w-3" />
+                                    {dossier.articleIds.length}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    {new Date(dossier.updatedAt).toLocaleDateString("fr-FR", { month: "short", year: "numeric" })}
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </Link>
+                        ))}
+                      </div>
+                      {dossiers.filter(d => d.isActive && !d.isFeatured).length > 4 && (
+                        <div className="flex justify-center mt-4">
+                          <Link href="/dossiers">
+                            <Button variant="outline" size="lg" className="group">
+                              Voir tous les dossiers
+                              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                            </Button>
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </section>
         )}
 
         {/* Dernières actualités */}
-        <section className="container py-8 sm:py-12" aria-labelledby="news-heading">
-          <div className="flex items-center justify-between mb-6 sm:mb-8">
+        <section className="container section-default" aria-labelledby="news-heading">
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
             <div className="flex items-center gap-2 sm:gap-3">
               <TrendingUp className="h-6 w-6 text-primary" aria-hidden="true" />
               <h2 id="news-heading" className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground font-['Sora']">
@@ -329,7 +388,7 @@ export default function Home() {
           </div>
 
           {/* Catégories tabs */}
-          <div className="flex flex-wrap gap-2 mb-6 sm:mb-8" role="tablist" aria-label="Filtrer par catégorie">
+          <div className="flex flex-wrap gap-2 mb-4 sm:mb-6" role="tablist" aria-label="Filtrer par catégorie">
             <Badge
               variant={activeCategory === null ? "default" : "outline"}
               className="px-4 py-2.5 min-h-[44px] cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors flex items-center"
@@ -362,66 +421,78 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Articles grid */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 min-w-0" role="tabpanel">
-            {regularArticles.length > 0 ? (
-              regularArticles.map((article) => (
-                <div key={article.id} className="min-w-0">
-                  <ArticleCard article={article} />
-                </div>
-              ))
-            ) : (
-              <div className="col-span-full text-center py-12">
-                <p className="text-muted-foreground">
-                  Aucun article dans cette catégorie pour le moment.
-                </p>
+          {/* Two-column layout: Articles + Newsletter Sidebar (desktop) */}
+          <div className="lg:grid lg:grid-cols-[1fr_280px] lg:gap-8">
+            {/* Main content - Articles grid */}
+            <div>
+              <div className="grid sm:grid-cols-2 gap-4 sm:gap-6 min-w-0" role="tabpanel">
+                {regularArticles.length > 0 ? (
+                  regularArticles.map((article) => (
+                    <div key={article.id} className="min-w-0">
+                      <ArticleCard article={article} />
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-span-full text-center py-12">
+                    <p className="text-muted-foreground">
+                      Aucun article dans cette catégorie pour le moment.
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* Load more / View all articles button */}
-          {regularArticles.length > 0 && hasMore && (
-            <div className="flex justify-center mt-8">
-              {remainingCount > 6 ? (
-                <Button 
-                  size="lg" 
-                  variant="outline" 
-                  onClick={handleLoadMore}
-                  className="group"
-                >
-                  Afficher plus d'articles
-                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
-                </Button>
-              ) : (
-                <Link href="/articles">
-                  <Button size="lg" className="group">
-                    Voir tous les articles
-                    <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
-                  </Button>
-                </Link>
+              {/* Load more / View all articles button */}
+              {regularArticles.length > 0 && hasMore && (
+                <div className="flex justify-center mt-6">
+                  {remainingCount > 6 ? (
+                    <Button 
+                      size="lg" 
+                      variant="outline" 
+                      onClick={handleLoadMore}
+                      className="group"
+                    >
+                      Afficher plus d'articles
+                      <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                    </Button>
+                  ) : (
+                    <Link href="/articles">
+                      <Button size="lg" className="group">
+                        Voir tous les articles
+                        <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              )}
+
+              {/* Link to all articles when all are displayed */}
+              {regularArticles.length > 0 && !hasMore && filteredArticles.length > 6 && (
+                <div className="flex justify-center mt-6">
+                  <Link href="/articles">
+                    <Button size="lg" variant="outline" className="group">
+                      Voir tous les articles
+                      <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
+                    </Button>
+                  </Link>
+                </div>
               )}
             </div>
-          )}
 
-          {/* Link to all articles when all are displayed */}
-          {regularArticles.length > 0 && !hasMore && filteredArticles.length > 6 && (
-            <div className="flex justify-center mt-8">
-              <Link href="/articles">
-                <Button size="lg" variant="outline" className="group">
-                  Voir tous les articles
-                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
-                </Button>
-              </Link>
-            </div>
-          )}
+            {/* Sidebar - Newsletter Widget (desktop only) */}
+            <aside className="hidden lg:block" aria-label="Newsletter">
+              <div className="sticky top-20">
+                <NewsletterWidget />
+              </div>
+            </aside>
+          </div>
         </section>
 
-        {/* Newsletter Section */}
-        <section className="bg-gradient-to-br from-primary to-primary/80 py-10 sm:py-16" aria-labelledby="newsletter-heading">
+        {/* Newsletter Section - Hidden on desktop where sidebar widget is visible */}
+        <section className="bg-gradient-to-br from-primary to-primary/80 section-cta lg:hidden" aria-labelledby="newsletter-heading">
           <div className="container">
             <Card className="max-w-2xl mx-auto border-none shadow-2xl">
-              <CardContent className="p-5 sm:p-8 text-center">
-                <div className="flex justify-center mb-4">
+              <CardContent className="p-5 sm:p-6 text-center">
+                <div className="flex justify-center mb-3">
                   <div className="p-3 bg-primary/10 rounded-full">
                     <Mail className="h-8 w-8 text-primary" aria-hidden="true" />
                   </div>
@@ -429,7 +500,7 @@ export default function Home() {
                 <h3 id="newsletter-heading" className="text-2xl font-bold text-foreground mb-2 font-['Sora']">
                   Newsletter hebdomadaire
                 </h3>
-                <p className="text-muted-foreground mb-6">
+                <p className="text-muted-foreground mb-4">
                   Recevez chaque vendredi le résumé de l'actualité économique
                   et financière de la zone UEMOA
                 </p>
@@ -464,7 +535,7 @@ export default function Home() {
         </section>
 
         {/* Stats Section */}
-        <section className="container py-8 sm:py-12" aria-label="Statistiques">
+        <section className="container section-default" aria-label="Statistiques">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
             <Card>
               <CardContent className="p-4 sm:p-6 text-center">

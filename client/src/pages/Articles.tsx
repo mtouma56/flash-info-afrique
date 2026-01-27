@@ -168,7 +168,7 @@ export default function Articles() {
       <main className="flex-1">
         {/* Hero Section */}
         <section
-          className="py-8 border-b border-border bg-gradient-to-br from-primary/5 to-secondary/5"
+          className="py-6 border-b border-border bg-gradient-to-br from-primary/5 to-secondary/5"
         >
           <div className="container">
             <div className="max-w-4xl mx-auto text-center">
@@ -188,9 +188,9 @@ export default function Articles() {
         </section>
 
         {/* Articles Section */}
-        <section className="container py-8 sm:py-12">
+        <section className="container py-6 sm:py-8">
           {/* Category filters */}
-          <div className="flex flex-wrap gap-2 mb-6 sm:mb-8" role="tablist" aria-label="Filtrer par catégorie">
+          <div className="flex flex-wrap gap-2 mb-4 sm:mb-6" role="tablist" aria-label="Filtrer par catégorie">
             <Badge
               variant={activeCategory === null ? "default" : "outline"}
               className="px-4 py-2.5 min-h-[44px] cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors flex items-center"
@@ -227,7 +227,7 @@ export default function Articles() {
           </div>
 
           {/* Articles count */}
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6 sm:mb-8">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4 sm:mb-6">
             <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground font-['Sora']">
               {sortedArticles.length} article{sortedArticles.length > 1 ? "s" : ""}
               {activeCategory && categories.find((c) => c.id === activeCategory) 
@@ -253,7 +253,7 @@ export default function Articles() {
               {/* Pagination */}
               {totalPages > 1 && (
                 <nav 
-                  className="flex items-center justify-center gap-1 mt-8 sm:mt-12" 
+                  className="flex items-center justify-center gap-1 mt-6 sm:mt-8" 
                   aria-label="Pagination des articles"
                 >
                   <Button

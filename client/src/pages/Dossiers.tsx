@@ -117,7 +117,7 @@ export default function Dossiers() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/5 py-8 border-b border-border" aria-labelledby="dossiers-title">
+        <section className="bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/5 py-6 border-b border-border" aria-labelledby="dossiers-title">
           <div className="container">
             <div className="max-w-4xl mx-auto text-center">
               <div className="flex justify-center mb-4">
@@ -147,7 +147,7 @@ export default function Dossiers() {
         </section>
 
         {/* Dossiers List */}
-        <section className="container py-8 sm:py-12" aria-labelledby="dossiers-list-heading">
+        <section className="container py-6 sm:py-8" aria-labelledby="dossiers-list-heading">
           {allDossiers.length === 0 ? (
             <Card className="bg-muted/50">
               <CardContent className="p-12 text-center">

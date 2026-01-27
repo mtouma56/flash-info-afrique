@@ -105,7 +105,7 @@ export default function Category() {
       <main className="flex-1">
         {/* Hero Section */}
         <section
-          className="py-8 border-b border-border"
+          className="py-6 border-b border-border"
           style={{
             background: `linear-gradient(135deg, ${category.color}10, ${category.color}05)`,
           }}
@@ -127,10 +127,10 @@ export default function Category() {
         </section>
 
         {/* Articles Grid */}
-        <section className="container py-8 sm:py-12">
+        <section className="container py-6 sm:py-8">
           {categoryArticles.length > 0 ? (
             <>
-              <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground mb-6 sm:mb-8 font-['Sora']">
+              <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground mb-4 sm:mb-6 font-['Sora']">
                 {categoryArticles.length} article{categoryArticles.length > 1 ? "s" : ""} dans cette catégorie
               </h2>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">

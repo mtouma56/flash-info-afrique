@@ -46,7 +46,8 @@
   /* Bloomberg Terminal Humanisé - Color System */
   --primary: #1E3A8A; /* Bleu marine profond */
   --primary-foreground: #F9FAFB;
-  --secondary: #F97316; /* Orange énergique */
+  --secondary: #F97316; /* Orange énergique (pour backgrounds/bordures) */
+  --secondary-text: #C2410C; /* Orange plus foncé pour texte (WCAG AA) */
   --secondary-foreground: #FFFFFF;
   --accent: #10B981; /* Vert émeraude (finance) */
   --accent-foreground: #FFFFFF;
@@ -262,5 +263,18 @@
       padding-right: 2rem;
       max-width: 1280px; /* Standard content width */
     }
+  }
+}
+
+@layer utilities {
+  /* Section spacing utilities - Unified spacing system (reduced ~40% for tighter layout) */
+  .section-default {
+    @apply py-5 sm:py-6 lg:py-8; /* 20px → 24px → 32px */
+  }
+  .section-hero {
+    @apply py-6 sm:py-8 lg:py-10; /* 24px → 32px → 40px */
+  }
+  .section-cta {
+    @apply py-8 sm:py-10 lg:py-12; /* 32px → 40px → 48px */
   }
 }

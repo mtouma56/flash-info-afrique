@@ -5,8 +5,8 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="border-t border-border bg-card mt-12 sm:mt-16" role="contentinfo">
-      <div className="container py-8 sm:py-12">
+    <footer className="border-t border-border bg-card mt-6 sm:mt-8" role="contentinfo">
+      <div className="container py-6 sm:py-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
           {/* About */}
           <div className="col-span-1 md:col-span-2">
@@ -103,7 +103,7 @@ export default function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="mt-6 sm:mt-8 pt-6 sm:pt-8 border-t border-border flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
+        <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-border flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
           <p className="text-sm text-muted-foreground text-center sm:text-left">
             © {currentYear} Flash Info Afrique. Tous droits réservés.
           </p>
@@ -111,7 +111,7 @@ export default function Footer() {
             <ul className="flex items-center space-x-2">
               <li>
                 <a
-                  href="https://linkedin.com"
+                  href="https://linkedin.com/company/flash-info-afrique"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded p-3 min-h-[44px] min-w-[44px] flex items-center justify-center"
@@ -122,7 +122,7 @@ export default function Footer() {
               </li>
               <li>
                 <a
-                  href="https://facebook.com"
+                  href="https://facebook.com/flashinfoafrique"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded p-3 min-h-[44px] min-w-[44px] flex items-center justify-center"
@@ -133,7 +133,7 @@ export default function Footer() {
               </li>
               <li>
                 <a
-                  href="https://twitter.com"
+                  href="https://twitter.com/flashinfoafrique"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded p-3 min-h-[44px] min-w-[44px] flex items-center justify-center"

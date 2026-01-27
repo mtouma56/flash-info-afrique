@@ -6,11 +6,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useArticles } from "@/hooks/useArticles";
-import { Menu, Search, X } from "lucide-react";
+import { useDossiers } from "@/hooks/useDossiers";
+import { ChevronDown, Menu, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
+import FeaturedDossierBar from "./FeaturedDossierBar";
 import ThemeToggle from "./ThemeToggle";
 
 export default function Header() {
@@ -19,15 +27,43 @@ export default function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const { articles } = useArticles();
+  const { dossiers, isLoading: isDossiersLoading } = useDossiers();
 
-  const navigation = [
+  // Derive the featured dossier (same logic as Home page)
+  const featuredDossier = useMemo(() => {
+    const featuredDossiers = dossiers
+      .filter(d => d.isFeatured && d.isActive)
+      .sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        if (a.order !== undefined) return -1;
+        if (b.order !== undefined) return 1;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+    return featuredDossiers[0] || null;
+  }, [dossiers]);
+
+  // Show featured dossier bar on all pages except home
+  const showFeaturedDossierBar = location !== "/" && !isDossiersLoading && featuredDossier;
+
+  // Main navigation items
+  const mainNavigation = [
     { name: "Accueil", href: "/" },
     { name: "Tous les articles", href: "/articles" },
     { name: "Dossiers", href: "/dossiers" },
+  ];
+
+  // Category items for dropdown
+  const categoryNavigation = [
     { name: "Banque & Finance", href: "/categorie/banque-finance" },
     { name: "Régulation", href: "/categorie/regulation-conformite" },
     { name: "Marchés", href: "/categorie/marches-investissements" },
   ];
+
+  // Combined for mobile navigation
+  const navigation = [...mainNavigation, ...categoryNavigation];
+
+  // Check if any category is active
+  const isCategoryActive = categoryNavigation.some(cat => location === cat.href);
 
   // Search results
   const searchResults = useMemo(() => {
@@ -116,7 +152,7 @@ export default function Header() {
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center space-x-1" aria-label="Navigation principale">
-              {navigation.map((item) => {
+              {mainNavigation.map((item) => {
                 const isActive = location === item.href;
                 return (
                   <Link
@@ -133,14 +169,45 @@ export default function Header() {
                   </Link>
                 );
               })}
+              
+              {/* Categories Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-1 ${
+                    isCategoryActive
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  Catégories
+                  <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-48">
+                  {categoryNavigation.map((item) => {
+                    const isActive = location === item.href;
+                    return (
+                      <DropdownMenuItem key={item.name} asChild>
+                        <Link
+                          href={item.href}
+                          className={`w-full cursor-pointer ${
+                            isActive ? "bg-primary/10 text-primary font-medium" : ""
+                          }`}
+                        >
+                          {item.name}
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </nav>
 
             {/* Right Actions */}
             <div className="flex items-center space-x-1 sm:space-x-2">
-              {/* Desktop Search Bar - Always visible */}
+              {/* Desktop/Tablet Search Bar - Visible from md breakpoint */}
               <button
                 onClick={() => setSearchOpen(true)}
-                className="hidden lg:flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground bg-muted/50 hover:bg-muted border border-border rounded-lg transition-colors min-w-[200px] xl:min-w-[280px]"
+                className="hidden md:flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground bg-muted/50 hover:bg-muted border border-border rounded-lg transition-colors min-w-[200px] xl:min-w-[280px]"
                 aria-label="Rechercher (Ctrl+K)"
               >
                 <Search className="h-4 w-4" aria-hidden="true" />
@@ -149,11 +216,11 @@ export default function Header() {
                   <span className="text-xs">⌘</span>K
                 </kbd>
               </button>
-              {/* Search icon for tablet */}
+              {/* Search icon for small tablet */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="hidden sm:flex lg:hidden h-11 w-11 min-h-[44px] min-w-[44px]"
+                className="hidden sm:flex md:hidden h-11 w-11 min-h-[44px] min-w-[44px]"
                 onClick={() => setSearchOpen(true)}
                 aria-label="Rechercher (Ctrl+K)"
               >
@@ -216,6 +283,11 @@ export default function Header() {
           )}
         </div>
       </header>
+
+      {/* Featured Dossier Bar - shown on all pages except home */}
+      {showFeaturedDossierBar && (
+        <FeaturedDossierBar dossier={{ slug: featuredDossier.slug, title: featuredDossier.title }} />
+      )}
 
       {/* Search Dialog */}
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
