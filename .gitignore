@@ -105,3 +105,6 @@ temp/
 *.sqlite
 *.sqlite3
 .vercel
+
+# Documents hors code (audits, livrables)
+*.pdf
