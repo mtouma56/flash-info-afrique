@@ -9,6 +9,8 @@ import ScrollToTop from "./components/ScrollToTop";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ArticlesProvider } from "./contexts/ArticlesContext";
+import { CookieConsentProvider } from "./contexts/CookieConsentContext";
+import CookieConsent from "./components/CookieConsent";
 import ProtectedRoute from "./pages/admin/ProtectedRoute";
 
 // Lazy load public pages for code splitting
@@ -165,14 +167,17 @@ function App() {
     <ErrorBoundary>
       <HelmetProvider>
         <ThemeProvider defaultTheme="system" switchable>
-          <AuthProvider>
-            <ArticlesProvider>
-              <TooltipProvider>
-                <Toaster />
-                <Router />
-              </TooltipProvider>
-            </ArticlesProvider>
-          </AuthProvider>
+          <CookieConsentProvider>
+            <AuthProvider>
+              <ArticlesProvider>
+                <TooltipProvider>
+                  <Toaster />
+                  <CookieConsent />
+                  <Router />
+                </TooltipProvider>
+              </ArticlesProvider>
+            </AuthProvider>
+          </CookieConsentProvider>
         </ThemeProvider>
       </HelmetProvider>
     </ErrorBoundary>

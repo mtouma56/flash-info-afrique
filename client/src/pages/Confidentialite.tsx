@@ -1,7 +1,74 @@
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import SEO from "@/components/SEO";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useCookieConsent } from "@/contexts/CookieConsentContext";
+import { Settings } from "lucide-react";
+
+function CookiesSection() {
+  const { consent, resetConsent } = useCookieConsent();
+
+  const getConsentStatus = () => {
+    if (!consent) return "Non configuré";
+    if (consent.analytics && consent.preferences) return "Tous acceptés";
+    if (!consent.analytics && !consent.preferences) return "Tous refusés";
+    const accepted = [];
+    if (consent.preferences) accepted.push("préférences");
+    if (consent.analytics) accepted.push("analytiques");
+    return `Acceptés : ${accepted.join(", ")}`;
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <h2 className="text-xl font-semibold text-foreground mb-4">
+          Cookies
+        </h2>
+        <div className="space-y-4 text-muted-foreground">
+          <p>
+            Lors de votre première visite, un bandeau vous permet de choisir les cookies que vous acceptez.
+            Les cookies analytiques (Umami Analytics) ne sont chargés qu'après votre consentement explicite.
+          </p>
+          <p>Notre site utilise les catégories de cookies suivantes :</p>
+          <ul className="list-disc list-inside space-y-2 ml-4">
+            <li>
+              <strong className="text-foreground">Cookies essentiels :</strong>{" "}
+              Nécessaires au fonctionnement du site (authentification, sécurité). Toujours actifs.
+            </li>
+            <li>
+              <strong className="text-foreground">Cookies de préférences :</strong>{" "}
+              Mémorisent vos préférences (thème clair/sombre). Soumis à votre consentement.
+            </li>
+            <li>
+              <strong className="text-foreground">Cookies analytiques :</strong>{" "}
+              Nous aident à comprendre comment le site est utilisé (Umami Analytics, respectueux de la vie privée).
+              Soumis à votre consentement.
+            </li>
+          </ul>
+
+          <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-foreground">Vos préférences actuelles</p>
+                <p className="text-sm text-muted-foreground">{getConsentStatus()}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={resetConsent}>
+                <Settings className="h-4 w-4 mr-1.5" />
+                Modifier mes choix
+              </Button>
+            </div>
+          </div>
+
+          <p className="text-sm">
+            Vous pouvez également configurer votre navigateur pour refuser les cookies. 
+            Cependant, certaines fonctionnalités du site peuvent ne plus fonctionner correctement.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Confidentialite() {
   return (
@@ -92,34 +159,7 @@ export default function Confidentialite() {
               </Card>
 
               {/* Cookies */}
-              <Card>
-                <CardContent className="p-6">
-                  <h2 className="text-xl font-semibold text-foreground mb-4">
-                    Cookies
-                  </h2>
-                  <div className="space-y-4 text-muted-foreground">
-                    <p>Notre site utilise des cookies pour :</p>
-                    <ul className="list-disc list-inside space-y-2 ml-4">
-                      <li>
-                        <strong className="text-foreground">Cookies essentiels :</strong>{" "}
-                        Nécessaires au fonctionnement du site
-                      </li>
-                      <li>
-                        <strong className="text-foreground">Cookies de préférences :</strong>{" "}
-                        Mémorisent vos préférences (thème clair/sombre)
-                      </li>
-                      <li>
-                        <strong className="text-foreground">Cookies analytiques :</strong>{" "}
-                        Nous aident à comprendre comment le site est utilisé
-                      </li>
-                    </ul>
-                    <p className="mt-4">
-                      Vous pouvez configurer votre navigateur pour refuser les cookies. 
-                      Cependant, certaines fonctionnalités du site peuvent ne plus fonctionner correctement.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+              <CookiesSection />
 
               {/* Conservation des données */}
               <Card>
