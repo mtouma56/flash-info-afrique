@@ -13,9 +13,9 @@
   "categories": ["news", "business", "finance"],
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "/logo.png",
       "sizes": "any",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any"
     },
     {
@@ -25,9 +25,9 @@
       "purpose": "any maskable"
     },
     {
-      "src": "/apple-touch-icon.svg",
+      "src": "/logo.png",
       "sizes": "180x180",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any"
     }
   ],
@@ -46,14 +46,14 @@
       "short_name": "Actualités",
       "description": "Voir les derniers articles",
       "url": "/",
-      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+      "icons": [{ "src": "/logo.png", "sizes": "any" }]
     },
     {
       "name": "Dossier FIDELIS",
       "short_name": "FIDELIS",
       "description": "Suivre le dossier FIDELIS Finance",
       "url": "/dossier/fidelis",
-      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+      "icons": [{ "src": "/logo.png", "sizes": "any" }]
     }
   ],
   "related_applications": [],
