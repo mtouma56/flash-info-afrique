@@ -1,5 +1,4 @@
-import Footer from "@/components/Footer";
-import Header from "@/components/Header";
+import PublicLayout from "@/components/PublicLayout";
 import SEO from "@/components/SEO";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +10,7 @@ import { Link, useLocation } from "wouter";
 
 export default function Dossiers() {
   const [, setLocation] = useLocation();
-  const { dossiers, isLoading, error, errorType, isOffline, refetch } = useDossiers();
+  const { dossiers, isLoading, error, errorType, refetch } = useDossiers();
   const [isRetrying, setIsRetrying] = useState(false);
 
   const handleRetry = useCallback(async () => {
@@ -40,38 +39,35 @@ export default function Dossiers() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col bg-background">
+      <PublicLayout>
         <SEO
           title="Dossiers d'investigation économique UEMOA"
           description="Découvrez tous nos dossiers d'investigation sur l'actualité économique, financière et réglementaire de la zone UEMOA."
           keywords="dossiers d'investigation, UEMOA, économie, finance, régulation, affaires économiques"
         />
-        <Header />
-        <main className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center py-12">
           <div className="text-center">
             <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
             <p className="text-muted-foreground">Chargement des dossiers...</p>
           </div>
-        </main>
-        <Footer />
-      </div>
+        </div>
+      </PublicLayout>
     );
   }
 
   // Error handling
   if (error) {
-    const isNetworkError = errorType === 'network' || errorType === 'timeout' || isOffline;
+    const isNetworkError = errorType === 'network' || errorType === 'timeout';
     const ErrorIcon = isNetworkError ? WifiOff : AlertCircle;
     const errorTitle = isNetworkError ? 'Problème de connexion' : 'Erreur de chargement';
 
     return (
-      <div className="min-h-screen flex flex-col bg-background">
+      <PublicLayout>
         <SEO
           title="Dossiers d'investigation économique UEMOA"
           description="Découvrez tous nos dossiers d'investigation sur l'actualité économique, financière et réglementaire de la zone UEMOA."
         />
-        <Header />
-        <main className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center py-12">
           <Card className="max-w-md mx-4">
             <CardContent className="pt-6 text-center">
               <ErrorIcon className="h-12 w-12 text-destructive mx-auto mb-4" />
@@ -97,25 +93,21 @@ export default function Dossiers() {
               </div>
             </CardContent>
           </Card>
-        </main>
-        <Footer />
-      </div>
+        </div>
+      </PublicLayout>
     );
   }
 
   const allDossiers = [...featuredDossiers, ...regularDossiers];
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <PublicLayout>
       <SEO
         title="Dossiers d'investigation économique UEMOA"
         description="Découvrez tous nos dossiers d'investigation sur l'actualité économique, financière et réglementaire de la zone UEMOA. Suivez les affaires en cours et les analyses approfondies."
         keywords="dossiers d'investigation, UEMOA, économie, finance, régulation, affaires économiques, investigation économique"
         url="https://flashinfoafrique.com/dossiers"
       />
-      <Header />
-
-      <main className="flex-1">
         {/* Hero Section */}
         <section className="bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/5 py-6 border-b border-border" aria-labelledby="dossiers-title">
           <div className="container">
@@ -261,9 +253,6 @@ export default function Dossiers() {
             </div>
           )}
         </section>
-      </main>
-
-      <Footer />
-    </div>
+    </PublicLayout>
   );
 }

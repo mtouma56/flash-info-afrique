@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
+import { VitePWA } from "vite-plugin-pwa";
 
 // =============================================================================
 // Manus Debug Collector - Vite Plugin
@@ -150,7 +151,90 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+const plugins = [
+  react(),
+  tailwindcss(),
+  jsxLocPlugin(),
+  vitePluginManusRuntime(),
+  vitePluginManusDebugCollector(),
+  VitePWA({
+    registerType: "autoUpdate",
+    includeAssets: ["favicon.svg", "logo.png", "logo.svg", "apple-touch-icon.svg"],
+    manifest: false, // Use existing manifest.json in public folder
+    workbox: {
+      // Precache static assets
+      globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
+      // Runtime caching strategies
+      runtimeCaching: [
+        {
+          // Cache API responses with network-first strategy
+          urlPattern: /^https?:\/\/.*\/api\/.*/i,
+          handler: "NetworkFirst",
+          options: {
+            cacheName: "api-cache",
+            expiration: {
+              maxEntries: 100,
+              maxAgeSeconds: 60 * 60, // 1 hour
+            },
+            cacheableResponse: {
+              statuses: [0, 200],
+            },
+          },
+        },
+        {
+          // Cache images with cache-first strategy
+          urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/i,
+          handler: "CacheFirst",
+          options: {
+            cacheName: "images-cache",
+            expiration: {
+              maxEntries: 200,
+              maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+            },
+          },
+        },
+        {
+          // Cache fonts
+          urlPattern: /\.(?:woff|woff2|ttf|eot)$/i,
+          handler: "CacheFirst",
+          options: {
+            cacheName: "fonts-cache",
+            expiration: {
+              maxEntries: 20,
+              maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+            },
+          },
+        },
+        {
+          // Cache Google Fonts
+          urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+          handler: "CacheFirst",
+          options: {
+            cacheName: "google-fonts-cache",
+            expiration: {
+              maxEntries: 10,
+              maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+            },
+          },
+        },
+        {
+          urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+          handler: "CacheFirst",
+          options: {
+            cacheName: "gstatic-fonts-cache",
+            expiration: {
+              maxEntries: 10,
+              maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+            },
+          },
+        },
+      ],
+    },
+    devOptions: {
+      enabled: false, // Disable SW in development to avoid caching issues
+    },
+  }),
+];
 
 export default defineConfig({
   plugins,

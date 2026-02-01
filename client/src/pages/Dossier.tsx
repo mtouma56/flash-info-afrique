@@ -1,6 +1,5 @@
 import ArticleCard from "@/components/ArticleCard";
-import Footer from "@/components/Footer";
-import Header from "@/components/Header";
+import PublicLayout from "@/components/PublicLayout";
 import SEO from "@/components/SEO";
 import StructuredData, { fidelisFaqItems } from "@/components/StructuredData";
 import { Badge } from "@/components/ui/badge";
@@ -80,16 +79,14 @@ export default function Dossier() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <Header />
-        <main className="flex-1 flex items-center justify-center">
+      <PublicLayout>
+        <div className="flex-1 flex items-center justify-center py-12">
           <div className="text-center">
             <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
             <p className="text-muted-foreground">Chargement du dossier...</p>
           </div>
-        </main>
-        <Footer />
-      </div>
+        </div>
+      </PublicLayout>
     );
   }
 
@@ -105,9 +102,8 @@ export default function Dossier() {
     
     // Network or server error - show retry option
     return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <Header />
-        <main className="flex-1 flex items-center justify-center">
+      <PublicLayout>
+        <div className="flex-1 flex items-center justify-center py-12">
           <Card className="max-w-md mx-4">
             <CardContent className="pt-6 text-center">
               <ErrorIcon className="h-12 w-12 text-destructive mx-auto mb-4" />
@@ -137,9 +133,8 @@ export default function Dossier() {
               </div>
             </CardContent>
           </Card>
-        </main>
-        <Footer />
-      </div>
+        </div>
+      </PublicLayout>
     );
   }
 
@@ -148,7 +143,7 @@ export default function Dossier() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <PublicLayout>
       <SEO
         title={dossier.title}
         description={enhancedDescription}
@@ -158,9 +153,6 @@ export default function Dossier() {
         geoPlacenames={isFidelisDossier ? ["Abidjan", "Ouagadougou"] : []}
       />
       <StructuredData dossier={dossier} faqItems={faqItems} />
-      <Header />
-
-      <main className="flex-1">
         {/* Hero Section */}
         <section className="bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/5 py-6 border-b border-border" aria-labelledby="dossier-title">
           <div className="container">
@@ -259,9 +251,9 @@ export default function Dossier() {
             Tous les articles ({dossierArticles.length})
           </h2>
           {dossierArticles.length > 0 ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="flex flex-col gap-3 min-w-0">
               {dossierArticles.map((article) => (
-                <ArticleCard key={article.id} article={article} />
+                <ArticleCard key={article.id} article={article} variant="row" />
               ))}
             </div>
           ) : (
@@ -320,9 +312,6 @@ export default function Dossier() {
             </CardContent>
           </Card>
         </section>
-      </main>
-
-      <Footer />
-    </div>
+    </PublicLayout>
   );
 }

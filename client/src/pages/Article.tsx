@@ -1,6 +1,5 @@
-import Footer from "@/components/Footer";
-import Header from "@/components/Header";
 import OptimizedImage from "@/components/OptimizedImage";
+import PublicLayout from "@/components/PublicLayout";
 import SEO, { calculateReadingTime, extractGeoKeywords, generateEnhancedKeywords } from "@/components/SEO";
 import StructuredData from "@/components/StructuredData";
 import TableOfContents, { generateContentWithIds } from "@/components/TableOfContents";
@@ -116,16 +115,14 @@ export default function Article() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <Header />
-        <main className="flex-1 flex items-center justify-center">
+      <PublicLayout>
+        <div className="flex-1 flex items-center justify-center py-12">
           <div className="text-center">
             <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
             <p className="text-muted-foreground">Chargement de l'article...</p>
           </div>
-        </main>
-        <Footer />
-      </div>
+        </div>
+      </PublicLayout>
     );
   }
 
@@ -141,9 +138,8 @@ export default function Article() {
     
     // Network or server error - show retry option
     return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <Header />
-        <main className="flex-1 flex items-center justify-center">
+      <PublicLayout>
+        <div className="flex-1 flex items-center justify-center py-12">
           <Card className="max-w-md mx-4">
             <CardContent className="pt-6 text-center">
               <ErrorIcon className="h-12 w-12 text-destructive mx-auto mb-4" />
@@ -173,9 +169,8 @@ export default function Article() {
               </div>
             </CardContent>
           </Card>
-        </main>
-        <Footer />
-      </div>
+        </div>
+      </PublicLayout>
     );
   }
 
@@ -184,7 +179,7 @@ export default function Article() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <PublicLayout>
       <SEO
         title={article.title}
         description={article.excerpt}
@@ -202,9 +197,6 @@ export default function Article() {
         geoPlacenames={geoInfo.placenames}
       />
       <StructuredData article={article} />
-      <Header />
-
-      <main className="flex-1">
         {/* Back button */}
         <div className="container py-4">
           <Button
@@ -461,9 +453,6 @@ export default function Article() {
             </div>
           </section>
         )}
-      </main>
-
-      <Footer />
-    </div>
+    </PublicLayout>
   );
 }

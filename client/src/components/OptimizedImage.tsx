@@ -15,6 +15,10 @@ interface OptimizedImageProps {
   srcSet?: string;
   onLoad?: () => void;
   onError?: () => void;
+  /** How the image should fit within its container (default: "cover") */
+  objectFit?: "contain" | "cover" | "fill" | "none";
+  /** Position of the image within its container (default: "center") */
+  objectPosition?: string;
 }
 
 // Default sizes for responsive images
@@ -71,6 +75,8 @@ export default function OptimizedImage({
   srcSet,
   onLoad,
   onError,
+  objectFit = "cover",
+  objectPosition = "center",
 }: OptimizedImageProps) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isInView, setIsInView] = useState(priority);
@@ -121,19 +127,27 @@ export default function OptimizedImage({
   // Compute aspect ratio style for container
   const aspectRatioStyle = aspectRatio ? { aspectRatio } : {};
 
+  // For object-fit: contain, we want the wrapper to fill the parent and center the image inside
+  const isContain = objectFit === "contain";
+  
+  const wrapperStyle = { 
+    width: width ? `${width}px` : "100%", 
+    height: height ? `${height}px` : "100%",
+    // Don't apply aspectRatio when contain mode - let parent control dimensions
+    ...(isContain ? {} : aspectRatioStyle)
+  };
+
   return (
     <div
       ref={containerRef}
       className={cn(
         "relative overflow-hidden",
         placeholder === "blur" && !isLoaded && "bg-muted animate-pulse",
+        // Add flex centering when using contain mode
+        isContain && "flex items-center justify-center",
         className
       )}
-      style={{ 
-        width: width ? `${width}px` : "100%", 
-        height: height ? `${height}px` : undefined,
-        ...aspectRatioStyle
-      }}
+      style={wrapperStyle}
     >
       {shouldLoad && (
         /* Image optimized via Cloudinary (automatic WebP/AVIF conversion, compression, and resizing) */
@@ -150,12 +164,20 @@ export default function OptimizedImage({
           onLoad={handleLoad}
           onError={handleError}
           className={cn(
-            "w-full h-full object-cover transition-opacity duration-300",
+            "transition-opacity duration-300",
+            // For contain mode: use max-w/max-h to fit within container while allowing centering
+            // For other modes: fill the container
+            isContain ? "max-w-full max-h-full" : "w-full h-full",
+            objectFit === "contain" && "object-contain",
+            objectFit === "cover" && "object-cover",
+            objectFit === "fill" && "object-fill",
+            objectFit === "none" && "object-none",
             isLoaded ? "opacity-100" : "opacity-0"
           )}
           style={{
             // Ensure explicit dimensions to prevent CLS
             aspectRatio: aspectRatio || undefined,
+            objectPosition: objectPosition,
           }}
         />
       )}

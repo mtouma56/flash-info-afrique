@@ -1,5 +1,4 @@
-import Footer from "@/components/Footer";
-import Header from "@/components/Header";
+import PublicLayout from "@/components/PublicLayout";
 import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -72,17 +71,13 @@ function CookiesSection() {
 
 export default function Confidentialite() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <PublicLayout>
       <SEO
         title="Politique de confidentialité"
         description="Politique de confidentialité de Flash Info Afrique - Protection de vos données personnelles, cookies et droits RGPD."
         url="https://flashinfoafrique.com/confidentialite"
       />
-
-      <Header />
-
-      <main className="flex-1">
-        <div className="container py-6 sm:py-8">
+      <div className="container py-6 sm:py-8">
           <div className="max-w-4xl mx-auto">
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-6">
               Politique de confidentialité
@@ -298,9 +293,6 @@ export default function Confidentialite() {
             </div>
           </div>
         </div>
-      </main>
-
-      <Footer />
-    </div>
+    </PublicLayout>
   );
 }

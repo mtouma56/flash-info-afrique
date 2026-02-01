@@ -1,20 +1,15 @@
-import Footer from "@/components/Footer";
-import Header from "@/components/Header";
+import PublicLayout from "@/components/PublicLayout";
 import SEO from "@/components/SEO";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default function MentionsLegales() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <PublicLayout>
       <SEO
         title="Mentions légales"
         description="Mentions légales de Flash Info Afrique - Informations sur l'éditeur, l'hébergeur et les conditions d'utilisation du site."
         url="https://flashinfoafrique.com/mentions-legales"
       />
-
-      <Header />
-
-      <main className="flex-1">
         <div className="container py-6 sm:py-8">
           <div className="max-w-4xl mx-auto">
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-6">
@@ -178,9 +173,6 @@ export default function MentionsLegales() {
             </div>
           </div>
         </div>
-      </main>
-
-      <Footer />
-    </div>
+    </PublicLayout>
   );
 }

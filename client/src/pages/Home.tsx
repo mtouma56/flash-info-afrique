@@ -1,9 +1,8 @@
 import ArticleCard from "@/components/ArticleCard";
 import FeaturedCarousel from "@/components/FeaturedCarousel";
-import Footer from "@/components/Footer";
-import Header from "@/components/Header";
 import NewsletterBar from "@/components/NewsletterBar";
 import NewsletterWidget from "@/components/NewsletterWidget";
+import PublicLayout from "@/components/PublicLayout";
 import SEO from "@/components/SEO";
 import StructuredData from "@/components/StructuredData";
 import { Badge } from "@/components/ui/badge";
@@ -13,12 +12,17 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useArticles } from "@/hooks/useArticles";
 import { useDossiers } from "@/hooks/useDossiers";
-import { AlertCircle, ArrowRight, Calendar, FileText, FolderOpen, Loader2, Mail, Star, TrendingUp, CheckCircle, XCircle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useIsMobileOrTablet } from "@/hooks/useMobileOrTablet";
+import { ArrowRight, Calendar, FileText, FolderOpen, Loader2, Mail, Star, TrendingUp, CheckCircle, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 
+// Lazy load mobile version
+const HomeMobile = lazy(() => import("./mobile/HomeMobile"));
+
 export default function Home() {
+  const isMobileOrTablet = useIsMobileOrTablet();
   const { articles, categories, isLoading } = useArticles();
   const { dossiers, isLoading: isDossiersLoading } = useDossiers();
   const [email, setEmail] = useState("");
@@ -181,27 +185,37 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col bg-background">
+      <PublicLayout>
         <SEO url="https://flashinfoafrique.com/" />
-        <Header />
-        <main className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center py-12">
           <div className="text-center">
             <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
             <p className="text-muted-foreground">Chargement des articles...</p>
           </div>
-        </main>
-        <Footer />
-      </div>
+        </div>
+      </PublicLayout>
+    );
+  }
+
+  // Render mobile version on mobile/tablet devices
+  if (isMobileOrTablet) {
+    return (
+      <PublicLayout>
+        <Suspense fallback={
+          <div className="flex-1 flex items-center justify-center py-12">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          </div>
+        }>
+          <HomeMobile />
+        </Suspense>
+      </PublicLayout>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <PublicLayout>
       <SEO url="https://flashinfoafrique.com/" />
       <StructuredData />
-      <Header />
-
-      <main className="flex-1">
         {/* Skip to main content link for accessibility */}
         <a
           href="#main-content"
@@ -299,11 +313,9 @@ export default function Home() {
 
                             {dossierArticles.length > 0 && (
                               <>
-                                <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6 min-w-0">
+                                <div className="flex flex-col gap-3 min-w-0 mb-4 sm:mb-6">
                                   {dossierArticles.slice(0, 3).map((article) => (
-                                    <div key={article.id} className="min-w-0">
-                                      <ArticleCard article={article} />
-                                    </div>
+                                    <ArticleCard key={article.id} article={article} variant="row" />
                                   ))}
                                 </div>
 
@@ -425,12 +437,10 @@ export default function Home() {
           <div className="lg:grid lg:grid-cols-[1fr_280px] lg:gap-8">
             {/* Main content - Articles grid */}
             <div>
-              <div className="grid sm:grid-cols-2 gap-4 sm:gap-6 min-w-0" role="tabpanel">
+              <div className="flex flex-col gap-3 min-w-0" role="tabpanel">
                 {regularArticles.length > 0 ? (
                   regularArticles.map((article) => (
-                    <div key={article.id} className="min-w-0">
-                      <ArticleCard article={article} />
-                    </div>
+                    <ArticleCard key={article.id} article={article} variant="row" />
                   ))
                 ) : (
                   <div className="col-span-full text-center py-12">
@@ -577,9 +587,6 @@ export default function Home() {
             </Card>
           </div>
         </section>
-      </main>
-
-      <Footer />
-    </div>
+    </PublicLayout>
   );
 }

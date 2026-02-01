@@ -9,11 +9,15 @@ import { Link } from "wouter";
 interface ArticleCardProps {
   article: Article;
   featured?: boolean;
+  /** Vignette horizontale : image à gauche, texte à droite (tous écrans) */
+  /** compact: version très compacte pour mobile */
+  variant?: "card" | "row" | "compact";
 }
 
 export default function ArticleCard({
   article,
   featured = false,
+  variant = "card",
 }: ArticleCardProps) {
   const { categories } = useArticles();
   const category = categories.find((c) => c.id === article.category);
@@ -25,6 +29,11 @@ export default function ArticleCard({
       day: "numeric",
     }
   );
+  const shortDate = new Date(article.publishedAt).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 
   if (featured) {
     return (
@@ -38,10 +47,9 @@ export default function ArticleCard({
                 alt={`Image illustrant: ${article.title}`}
                 className="w-full h-full group-hover:scale-105 transition-transform duration-500"
                 aspectRatio="16/9"
-                width={800}
-                height={450}
                 priority={true}
                 sizes="(max-width: 768px) 100vw, 50vw"
+                objectFit="contain"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
               {article.isFeatured && (
@@ -111,6 +119,96 @@ export default function ArticleCard({
     );
   }
 
+  /* Variante compacte pour mobile */
+  if (variant === "compact") {
+    return (
+      <article className="group w-full min-w-0">
+        <Link href={`/article/${article.slug}`} className="block w-full">
+          <Card className="overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm transition-all duration-200 hover:shadow-md hover:border-primary/20 flex w-full flex-row min-h-[5rem] active:scale-[0.99]">
+            {/* Petite image à gauche */}
+            <div className="relative flex-shrink-0 w-24 h-24 overflow-hidden bg-muted/80">
+              <OptimizedImage
+                src={article.imageUrl}
+                alt={`Image illustrant: ${article.title}`}
+                className="w-full h-full group-hover:scale-105 transition-transform duration-300"
+                objectFit="cover"
+                objectPosition="center"
+                priority={false}
+                sizes="96px"
+              />
+            </div>
+
+            {/* Contenu compact */}
+            <CardContent className="flex flex-1 min-w-0 flex-col justify-center gap-1 p-3">
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] font-medium shrink-0 px-1.5 py-0 rounded"
+                  style={{ borderColor: category?.color, color: category?.color }}
+                >
+                  {category?.name}
+                </Badge>
+                <time dateTime={article.publishedAt} className="text-[10px] text-muted-foreground font-mono tabular-nums">
+                  {shortDate}
+                </time>
+              </div>
+              <h3 className="text-sm font-semibold leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2 break-words">
+                {article.title}
+              </h3>
+            </CardContent>
+          </Card>
+        </Link>
+      </article>
+    );
+  }
+
+  /* Vignette horizontale : image à gauche, texte à droite (tous écrans) */
+  if (variant === "row") {
+    return (
+      <article className="group w-full min-w-0">
+        <Link href={`/article/${article.slug}`} className="block w-full">
+          <Card className="overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm transition-all duration-300 hover:shadow-md hover:border-primary/20 flex w-full flex-row min-h-[7rem] sm:min-h-[8.5rem] pl-3 sm:pl-4">
+            {/* Image à gauche, largeur fixe */}
+            <div className="relative flex-shrink-0 w-36 sm:w-44 h-28 sm:h-34 overflow-hidden bg-muted/80 rounded-lg my-auto">
+              <OptimizedImage
+                src={article.imageUrl}
+                alt={`Image illustrant: ${article.title}`}
+                className="w-full h-full group-hover:scale-105 transition-transform duration-300"
+                objectFit="cover"
+                objectPosition="center"
+                priority={false}
+                sizes="(max-width: 640px) 144px, 176px"
+              />
+            </div>
+
+            {/* Contenu à droite */}
+            <CardContent className="flex flex-1 min-w-0 flex-col justify-center gap-1.5 border-l border-border/60 p-4 sm:p-5">
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge
+                  variant="outline"
+                  className="text-[11px] font-medium shrink-0 px-2 py-0.5 rounded"
+                  style={{ borderColor: category?.color, color: category?.color }}
+                >
+                  {category?.name}
+                </Badge>
+                <time dateTime={article.publishedAt} className="text-xs text-muted-foreground font-mono tabular-nums shrink-0">
+                  {shortDate}
+                </time>
+              </div>
+              <h3 className="font-['Sora'] text-base sm:text-lg font-semibold leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2 break-words">
+                {article.title}
+              </h3>
+              <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2 break-words">
+                {article.excerpt}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+      </article>
+    );
+  }
+
+  /* Carte par défaut : image au-dessus, texte en dessous */
   return (
     <article className="group min-w-0 max-w-full">
       <Card className="overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1 h-full flex flex-col max-w-full">
