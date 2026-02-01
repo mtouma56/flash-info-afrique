@@ -159,11 +159,15 @@ const plugins = [
   vitePluginManusDebugCollector(),
   VitePWA({
     registerType: "autoUpdate",
-    includeAssets: ["favicon.svg", "logo.png", "logo.svg", "apple-touch-icon.svg"],
+    includeAssets: ["favicon.svg", "logo.svg", "apple-touch-icon.svg"],
     manifest: false, // Use existing manifest.json in public folder
     workbox: {
+      // Don't precache assets > 2 MiB (large logos stay server/runtime-cached)
+      maximumFileSizeToCacheInBytes: 2 * 1024 * 1024,
       // Precache static assets
       globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
+      // Exclude large logos from precache (they're cached at runtime when loaded)
+      globIgnores: ["**/logo.png", "**/logo_flaashinfoafrique.png"],
       // Runtime caching strategies
       runtimeCaching: [
         {
