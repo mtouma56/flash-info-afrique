@@ -137,7 +137,7 @@ export default function CookieConsent() {
               <div className="space-y-0.5">
                 <p className="text-sm font-medium">Cookies analytiques</p>
                 <p className="text-xs text-muted-foreground">
-                  Nous aident à comprendre comment le site est utilisé (Umami Analytics).
+                  Nous aident à comprendre comment le site est utilisé (Google Analytics et Umami).
                 </p>
               </div>
               <Switch

@@ -6,14 +6,14 @@ var __esm = (fn, res) => function __init() {
 // server/lib/supabase.ts
 import { createClient } from "@supabase/supabase-js";
 function validateSupabaseConfig() {
-  const isProduction = process.env.NODE_ENV === "production";
+  const isProduction2 = process.env.NODE_ENV === "production";
   const missing = [];
   if (!supabaseUrl) missing.push("SUPABASE_URL");
   if (!supabaseAnonKey) missing.push("SUPABASE_ANON_KEY");
   if (!supabaseServiceRoleKey) missing.push("SUPABASE_SERVICE_ROLE_KEY");
   if (missing.length > 0) {
     const message = `Missing required Supabase environment variables: ${missing.join(", ")}`;
-    if (isProduction) {
+    if (isProduction2) {
       console.error(`\u274C ${message}`);
       console.error("Application cannot start without Supabase configuration.");
       process.exit(1);
@@ -1012,8 +1012,8 @@ function createLogEntry(level, message, context, error) {
   };
 }
 function output(entry) {
-  const isProduction = process.env.NODE_ENV === "production";
-  if (isProduction) {
+  const isProduction2 = process.env.NODE_ENV === "production";
+  if (isProduction2) {
     const method = entry.level === "error" ? console.error : entry.level === "warn" ? console.warn : console.log;
     method(JSON.stringify(entry));
   } else {
@@ -2464,6 +2464,7 @@ app.use(
           "https://fonts.gstatic.com",
           "https://*.sentry.io",
           "https://*.ingest.sentry.io",
+          "https://www.googletagmanager.com",
           process.env.VITE_ANALYTICS_ENDPOINT || ""
         ].filter(Boolean),
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
@@ -2476,6 +2477,8 @@ app.use(
           "wss://*.supabase.co",
           "https://*.sentry.io",
           "https://*.ingest.sentry.io",
+          "https://www.google-analytics.com",
+          "https://www.googletagmanager.com",
           process.env.VITE_ANALYTICS_ENDPOINT || ""
         ].filter(Boolean),
         frameSrc: ["'none'"],
@@ -2498,10 +2501,14 @@ app.use(
   })
 );
 var corsOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(",").map((origin) => origin.trim()) : [];
-var defaultOrigins = process.env.NODE_ENV === "production" ? [
+var isProduction = process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production";
+var isVercel = !!process.env.VERCEL;
+var defaultOrigins = isProduction || isVercel ? [
   "https://flashinfoafrique.com",
   "https://www.flashinfoafrique.com",
-  "https://flash-info-afrique.vercel.app"
+  "https://flash-info-afrique.vercel.app",
+  "https://flash-info-afrique-*.vercel.app"
+  // Allow preview deployments
 ] : [
   "http://localhost:3000",
   "http://localhost:3001",
@@ -2510,17 +2517,34 @@ var defaultOrigins = process.env.NODE_ENV === "production" ? [
   "http://127.0.0.1:3001"
 ];
 var allowedOrigins = [.../* @__PURE__ */ new Set([...corsOrigins, ...defaultOrigins])];
+logger_default.info("CORS configuration", {
+  isProduction,
+  isVercel,
+  allowedOrigins: allowedOrigins.length,
+  env: process.env.VERCEL_ENV || process.env.NODE_ENV
+});
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) {
+      logger_default.debug("CORS: Allowing request with no origin");
       return callback(null, true);
     }
     if (allowedOrigins.includes(origin)) {
+      logger_default.debug("CORS: Allowing origin (exact match)", { origin });
       return callback(null, true);
     }
-    if (process.env.NODE_ENV === "production") {
-      logger_default.warn("CORS blocked origin", { origin });
+    if (isVercel && origin.match(/^https:\/\/flash-info-afrique-.*\.vercel\.app$/)) {
+      logger_default.debug("CORS: Allowing Vercel preview deployment", { origin });
+      return callback(null, true);
     }
+    logger_default.warn("CORS blocked origin", {
+      origin,
+      allowedOrigins,
+      isProduction,
+      isVercel,
+      vercelEnv: process.env.VERCEL_ENV,
+      nodeEnv: process.env.NODE_ENV
+    });
     return callback(new Error("Not allowed by CORS"), false);
   },
   credentials: true,
@@ -3042,32 +3066,67 @@ app.get("/api/cron/health", async (_req, res) => {
   }
 });
 app.post("/api/admin/login", async (req, res) => {
+  const requestId = `login-${Date.now()}`;
+  logger_default.info(`[LOGIN ${requestId}] Login attempt started`);
   try {
     const { username, password } = req.body;
+    logger_default.info(`[LOGIN ${requestId}] Received credentials`, { hasUsername: !!username, hasPassword: !!password });
     if (!username || !password) {
+      logger_default.warn(`[LOGIN ${requestId}] Missing credentials`);
       return res.status(400).json({ error: "Identifiants requis" });
     }
-    const users = await supabaseStorage_default.getAdminUsers();
+    logger_default.info(`[LOGIN ${requestId}] Fetching admin users...`);
+    let users;
+    try {
+      users = await supabaseStorage_default.getAdminUsers();
+      logger_default.info(`[LOGIN ${requestId}] Found ${users.length} admin users`);
+    } catch (err) {
+      logger_default.error(`[LOGIN ${requestId}] Error fetching admin users`, void 0, err);
+      throw err;
+    }
     if (users.length === 0 && username === "admin" && password === "admin123") {
+      logger_default.info(`[LOGIN ${requestId}] Creating default admin user...`);
       try {
         await supabaseStorage_default.createAdminUser({
           username: "admin",
           password: "admin123",
           email: "admin@flash-info-afrique.local"
         });
+        logger_default.info(`[LOGIN ${requestId}] Default admin user created`);
       } catch (err) {
-        logger_default.error("Error creating default admin", void 0, err);
+        logger_default.error(`[LOGIN ${requestId}] Error creating default admin`, void 0, err);
       }
     }
-    const authResult = await authenticateByUsername(username, password);
-    if (!authResult) {
-      return res.status(401).json({ error: "Identifiants incorrects" });
+    logger_default.info(`[LOGIN ${requestId}] Calling authenticateByUsername...`);
+    let authResult;
+    try {
+      authResult = await authenticateByUsername(username, password);
+      logger_default.info(`[LOGIN ${requestId}] authenticateByUsername completed`, { success: authResult.success });
+    } catch (err) {
+      logger_default.error(`[LOGIN ${requestId}] Error in authenticateByUsername`, void 0, err);
+      throw err;
+    }
+    if (!authResult.success) {
+      return res.status(401).json({
+        error: authResult.errorMessage || "Identifiants incorrects",
+        code: authResult.errorCode || "UNKNOWN_ERROR"
+      });
+    }
+    if (!authResult.user || !authResult.token) {
+      logger_default.error("Login error: Missing user or token in authResult", {
+        hasUser: !!authResult.user,
+        hasToken: !!authResult.token
+      });
+      return res.status(500).json({
+        error: "Erreur lors de la connexion",
+        code: "INCOMPLETE_AUTH_RESULT"
+      });
     }
     return res.json({
       token: authResult.token,
       session: {
         access_token: authResult.token,
-        refresh_token: authResult.refreshToken
+        refresh_token: authResult.refreshToken || authResult.token
       },
       user: {
         id: authResult.user.userId,
@@ -3077,8 +3136,21 @@ app.post("/api/admin/login", async (req, res) => {
       }
     });
   } catch (error) {
-    logger_default.error("Login error", void 0, error);
-    return res.status(500).json({ error: "Erreur lors de la connexion" });
+    const errorMessage = error instanceof Error ? error.message : "Erreur inattendue";
+    const errorStack = error instanceof Error ? error.stack : void 0;
+    const errorName = error instanceof Error ? error.name : void 0;
+    logger_default.error(`[LOGIN ${requestId}] Login error`, {
+      message: errorMessage,
+      name: errorName,
+      stack: errorStack
+    }, error);
+    const isDev = process.env.NODE_ENV !== "production";
+    return res.status(500).json({
+      error: "Erreur lors de la connexion",
+      message: isDev ? errorMessage : "Une erreur serveur est survenue",
+      code: "SERVER_ERROR",
+      ...isDev && errorStack ? { stack: errorStack } : {}
+    });
   }
 });
 app.get("/api/admin/me", requireAuth, async (req, res) => {

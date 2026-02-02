@@ -116,6 +116,8 @@ async function startServer() {
             // Allow Sentry if configured
             "https://*.sentry.io",
             "https://*.ingest.sentry.io",
+            // Allow Google Analytics
+            "https://www.googletagmanager.com",
             // Allow analytics if configured (Umami)
             process.env.VITE_ANALYTICS_ENDPOINT || "",
           ].filter(Boolean),
@@ -130,7 +132,10 @@ async function startServer() {
             // Sentry
             "https://*.sentry.io",
             "https://*.ingest.sentry.io",
-            // Analytics
+            // Google Analytics
+            "https://www.google-analytics.com",
+            "https://www.googletagmanager.com",
+            // Analytics (Umami)
             process.env.VITE_ANALYTICS_ENDPOINT || "",
           ].filter(Boolean),
           frameSrc: ["'none'"],

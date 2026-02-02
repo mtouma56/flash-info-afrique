@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 
+// Extend Window interface for Google Analytics
+declare global {
+  interface Window {
+    dataLayer?: unknown[];
+    gtag?: (...args: unknown[]) => void;
+  }
+}
+
 const STORAGE_KEY = "cookie_consent";
 const CONSENT_VERSION = 1; // Bump this to force re-consent when policy changes
 
@@ -85,6 +93,36 @@ function loadUmamiScript(): void {
   }
 }
 
+function loadGoogleAnalytics(): void {
+  // Prevent loading twice
+  if (document.getElementById("ga4-script")) return;
+
+  const id = import.meta.env.VITE_GA_MEASUREMENT_ID;
+
+  // Only load if measurement ID is set and valid
+  if (!id || typeof id !== "string" || id.trim() === "") return;
+
+  // Create and inject the gtag.js script
+  const script = document.createElement("script");
+  script.id = "ga4-script";
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${id}`;
+  document.head.appendChild(script);
+
+  // Initialize dataLayer and gtag function
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function gtag(...args: unknown[]) {
+    window.dataLayer?.push(args);
+  };
+
+  // Configure GA4 with privacy-friendly settings
+  window.gtag("js", new Date());
+  window.gtag("config", id, {
+    anonymize_ip: true,
+    cookie_flags: "SameSite=None;Secure",
+  });
+}
+
 interface CookieConsentProviderProps {
   children: React.ReactNode;
 }
@@ -99,10 +137,11 @@ export function CookieConsentProvider({ children }: CookieConsentProviderProps) 
     return loadStoredConsent() === null;
   });
 
-  // Load Umami when analytics consent is granted
+  // Load analytics scripts when consent is granted
   useEffect(() => {
     if (consent?.analytics) {
       loadUmamiScript();
+      loadGoogleAnalytics();
     }
   }, [consent?.analytics]);
 

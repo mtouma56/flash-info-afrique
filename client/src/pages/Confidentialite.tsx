@@ -27,7 +27,7 @@ function CookiesSection() {
         <div className="space-y-4 text-muted-foreground">
           <p>
             Lors de votre première visite, un bandeau vous permet de choisir les cookies que vous acceptez.
-            Les cookies analytiques (Umami Analytics) ne sont chargés qu'après votre consentement explicite.
+            Les cookies analytiques (Google Analytics et Umami Analytics) ne sont chargés qu'après votre consentement explicite.
           </p>
           <p>Notre site utilise les catégories de cookies suivantes :</p>
           <ul className="list-disc list-inside space-y-2 ml-4">
@@ -41,7 +41,7 @@ function CookiesSection() {
             </li>
             <li>
               <strong className="text-foreground">Cookies analytiques :</strong>{" "}
-              Nous aident à comprendre comment le site est utilisé (Umami Analytics, respectueux de la vie privée).
+              Nous aident à comprendre comment le site est utilisé (Google Analytics avec anonymisation IP, et Umami Analytics, respectueux de la vie privée).
               Soumis à votre consentement.
             </li>
           </ul>
