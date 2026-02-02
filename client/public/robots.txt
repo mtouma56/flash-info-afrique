@@ -16,7 +16,6 @@ Disallow: /api/admin/
 Disallow: /api/scrape-rss
 Disallow: /api/newsletter/
 Disallow: /admin/
-Disallow: /__manus__/
 
 # Allow public API endpoints for indexing
 Allow: /api/articles

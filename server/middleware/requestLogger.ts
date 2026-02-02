@@ -14,7 +14,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
     const userAgent = req.get("user-agent");
 
     // Skip logging for static files and health checks in production
-    const skipPaths = ["/favicon", "/assets/", "/__manus__/", "/health"];
+    const skipPaths = ["/favicon", "/assets/", "/health"];
     const shouldSkip = 
       process.env.NODE_ENV === "production" &&
       skipPaths.some((path) => req.path.startsWith(path));
